@@ -1,61 +1,7 @@
 <!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#151619">
-  <meta name="referrer" content="no-referrer">
-  <title>Coca-Cola · SMS Desk</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23ed2839'/%3E%3Cpath d='M42 19a18 18 0 1 0 0 26' fill='none' stroke='white' stroke-width='7'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./styles.css">
-  <script type="module" src="./app.js"></script>
-</head>
-<body>
-  <div class="app-shell">
-    <header class="topbar">
-      <a class="brand" href="./" aria-label="SMS Desk — главная"><span class="brand-mark">C<span>•</span></span><span>SMS<span class="brand-light">Desk</span><small>COCA-COLA WORKSPACE</small></span></a>
-      <div class="top-actions">
-        <span id="connection" class="connection"><i></i><span>Не подключено</span></span>
-        <span class="top-divider"></span>
-        <div class="balance"><span>Баланс SMSPool</span><strong id="balance">$ —</strong></div>
-        <button id="refresh" class="icon-button" title="Обновить баланс и заказы" aria-label="Обновить баланс и заказы" data-icon="refresh"></button>
-        <button id="settings" class="icon-button" title="Настройки подключения" aria-label="Настройки подключения" data-icon="settings"></button>
-      </div>
-    </header>
-
-    <main>
-      <section class="heading"><div><div class="eyebrow"><span></span> SMS-ВЕРИФИКАЦИЯ</div><h1>Номер. Сообщение. Готово<span>.</span></h1><p>Израильский номер для Coca-Cola — всё в одном месте.</p></div><button id="demo" class="quiet-button"><span data-icon="play"></span>Демо-режим</button></section>
-
-      <section class="workspace" aria-label="Покупка и получение SMS">
-        <div class="purchase-panel">
-          <div class="panel-top"><span class="section-label">НОВЫЙ НОМЕР</span><span class="step-label">01 / PURCHASE</span></div>
-          <div class="service-line"><div class="coca-logo">Coca-Cola<small>SMS VERIFICATION</small></div><span class="service-badge">Сервис</span></div>
-          <div class="country-line"><span class="israel-flag" aria-hidden="true">✡</span><div><strong>Израиль</strong><small>Israel · +972</small></div><span class="fixed-badge" data-icon="lock" title="Страна фиксирована"></span></div>
-          <div class="purchase-bottom"><div class="price-line"><span>Цена номера <span class="muted">· от</span></span><strong id="price">$ —</strong></div><button id="buy" class="primary-button"><span data-icon="plus"></span><span id="buy-label">Подключить SMSPool</span><span data-icon="arrow"></span></button><p class="purchase-note"><span data-icon="shield"></span><span id="purchase-note">Одна кнопка — один номер. Без подписки.</span></p></div>
-        </div>
-
-        <div class="receive-panel">
-          <div class="panel-top"><span class="section-label">ТЕКУЩИЙ ЗАКАЗ</span><span id="live-badge" class="live-badge"><i></i> LIVE SMS</span></div>
-          <div id="current-empty" class="current-empty"><div class="empty-orbit"><span data-icon="message"></span><i class="orbit-dot"></i></div><h2>Здесь появится ваш номер</h2><p>Купите номер, отправьте на него SMS из Coca-Cola.<br>Мы покажем код, как только он придёт.</p><div class="flow"><span>Купить номер</span><span data-icon="chevron"></span><span>Получить SMS</span><span data-icon="chevron"></span><span>Скопировать код</span></div></div>
-          <div id="current-order" class="current-order" hidden>
-            <div class="order-meta"><span id="current-status" class="status"></span><span id="countdown" class="countdown"></span></div>
-            <div class="current-values"><div><label>НОМЕР ТЕЛЕФОНА</label><button id="copy-current-phone" class="large-copy" title="Скопировать номер"><span id="current-phone"></span><span data-icon="copy"></span></button><span id="current-id" class="order-id"></span></div><div class="code-block"><label>КОД ИЗ SMS</label><button id="copy-current-code" class="large-copy code-value" title="Скопировать код" disabled><span id="current-code">••• •••</span><span data-icon="copy"></span></button><span id="code-caption" class="order-id">Проверяем каждые 3 секунды</span></div></div>
-            <div class="message-preview"><span data-icon="message"></span><p id="full-message">Ожидаем входящее сообщение…</p><button id="cancel-order" class="text-button">Отменить номер</button></div>
-          </div>
-          <div class="receive-footer"><span><i id="poll-dot"></i><span id="poll-label">Автоматическое получение кода</span></span><span id="last-sync">Ожидаем подключения</span></div>
-        </div>
-      </section>
-
-      <section class="history" aria-label="История номеров">
-        <div class="history-toolbar"><div class="history-title"><h2>История номеров</h2><span id="history-count" class="count-pill">0</span></div><div class="history-tools"><div class="tabs" role="group" aria-label="Фильтр истории"><button data-filter="all" class="active">Все</button><button data-filter="waiting">В ожидании <span id="waiting-count">0</span></button><button data-filter="completed">Получены</button></div><label class="search"><span data-icon="search"></span><input id="search" placeholder="Номер или код" aria-label="Поиск номера или кода"></label><button id="export" class="icon-button" title="Скачать историю CSV" aria-label="Скачать историю CSV" data-icon="download"></button></div></div>
-        <div id="table-viewport" class="table-viewport"><table><thead><tr><th>#</th><th>НОМЕР ТЕЛЕФОНА</th><th>SMS-КОД</th><th>СЕРВИС</th><th>СТРАНА</th><th>СТАТУС</th><th>СТОИМОСТЬ</th><th aria-label="Действия"></th></tr></thead><tbody id="history-body"></tbody></table><div id="history-empty" class="history-empty"><span data-icon="history"></span><strong>История начинается с первого номера</strong><span>Ваши номера и полученные коды сохранятся здесь.</span></div></div>
-        <div class="history-footer"><span id="rows-info">Пока нет заказов</span><div class="pagination"><button id="prev" class="icon-button" aria-label="Предыдущая страница" data-icon="chevron-left" disabled></button><span id="page-info">1 / 1</span><button id="next" class="icon-button" aria-label="Следующая страница" data-icon="chevron" disabled></button></div></div>
-      </section>
-    </main>
-    <footer class="page-footer"><span><i></i> Ваш рабочий стол для SMS</span><span>Coca-Cola <b>×</b> SMSPool<span class="footer-separator">/</span>Israel, +972</span></footer>
-  </div>
-
-  <dialog id="settings-dialog"><form id="settings-form"><div class="dialog-heading"><div><span class="eyebrow">ПОДКЛЮЧЕНИЕ</span><h2>Ваш аккаунт SMSPool</h2></div><button type="button" id="close-settings" class="icon-button" aria-label="Закрыть настройки" data-icon="close"></button></div><p class="dialog-description">Один раз подключите аккаунт — дальше всё на одном экране.</p><label class="field">API-ключ<input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="Вставьте ключ SMSPool" required></label><p class="field-hint">Ключ хранится только до закрытия вкладки. <a href="https://www.smspool.net/my/settings" target="_blank" rel="noopener noreferrer">Где взять ключ ↗</a></p><label class="field">Адрес API-прокси<input id="proxy-url" type="url" placeholder="https://your-worker.workers.dev" spellcheck="false"></label><p class="field-hint">Для GitHub Pages укажите URL вашего Cloudflare Worker. При локальном запуске оставьте пустым.</p><div class="settings-grid"><label class="field">Лимит цены, USD<input id="max-price" type="number" min="0.01" step="0.01" placeholder="Без лимита"></label><label class="checkbox-field"><input id="sound" type="checkbox" checked><span>Звук при получении SMS</span></label></div><p id="settings-error" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" id="disconnect" class="quiet-button">Отключить</button><button id="connect" class="primary-button" type="submit">Подключить аккаунт <span data-icon="arrow"></span></button></div></form></dialog>
-  <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
-</body>
-</html>
+<html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f8e76a"><meta name="referrer" content="no-referrer"><title>Coca-Cola SMS</title><link rel="icon" href="./assets/coca-cola.svg"><link rel="stylesheet" href="./styles.css"><script type="module" src="./app.js"></script></head>
+<body><div class="app-shell">
+<header class="topbar"><span id="connection" class="connection" aria-label="Подключение"><i></i><span class="sr-only">Не подключено</span></span><strong id="balance" aria-label="Баланс">$ —</strong><div class="top-actions"><button id="refresh" class="icon-button" title="Обновить" aria-label="Обновить баланс и заказы" data-icon="refresh"></button><button id="settings" class="icon-button" title="Настройки" aria-label="Настройки подключения" data-icon="settings"></button></div></header>
+<main><section class="stage" aria-label="Покупка номера и получение SMS"><div id="circle" class="circle"><button id="buy" class="circle-buy" aria-label="Купить номер Coca-Cola"><img class="coca-logo" src="./assets/coca-cola.svg" alt="Coca-Cola"><span id="buy-label" class="sr-only"></span></button><div id="current-order" class="circle-order" hidden><button id="copy-current-code" class="circle-code" title="Скопировать код" aria-label="Скопировать код" hidden><span id="current-code"></span><span data-icon="copy"></span></button><button id="copy-current-phone" class="circle-phone" title="Скопировать номер" aria-label="Скопировать номер"><span id="current-phone"></span><span data-icon="copy"></span></button><span id="countdown" class="countdown"></span></div></div><button id="new-order" class="new-order icon-button" aria-label="Купить ещё номер" title="Купить ещё номер" data-icon="plus" hidden></button></section>
+<section class="history" aria-label="История номеров"><div class="table-toolbar"><input id="search" aria-label="Поиск номера или кода" placeholder="Поиск" type="search"><span id="demo-indicator" hidden>DEMO</span></div><div id="table-viewport" class="table-viewport"><table><thead><tr><th>ID</th><th>Phone number</th><th>Code</th><th>Статус</th><th>Цена</th><th></th></tr></thead><tbody id="history-body"></tbody></table><div id="history-empty" class="history-empty">—</div></div><div class="history-footer"><span id="rows-info"></span><div class="pagination"><button id="prev" class="icon-button" aria-label="Предыдущая страница" data-icon="chevron-left" disabled></button><span id="page-info">1 / 1</span><button id="next" class="icon-button" aria-label="Следующая страница" data-icon="chevron" disabled></button></div></div></section></main></div>
+<dialog id="settings-dialog"><form id="settings-form"><div class="dialog-heading"><div><h2>Настройки</h2></div><button type="button" id="close-settings" class="icon-button" aria-label="Закрыть настройки" data-icon="close"></button></div><label class="field">API-ключ<input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="Вставьте ключ SMSPool" required></label><label class="field">Адрес API-прокси<input id="proxy-url" type="url" placeholder="https://your-worker.workers.dev" spellcheck="false"></label><div class="settings-grid"><label class="field">Лимит цены, USD<input id="max-price" type="number" min="0.01" step="0.01" placeholder="Без лимита"></label><label class="checkbox-field"><input id="sound" type="checkbox" checked><span>Звук при получении SMS</span></label></div><p id="settings-error" class="form-error" role="alert"></p><div class="utility-actions"><button type="button" id="demo" class="quiet-button">Демо</button><button type="button" id="export" class="icon-button" title="CSV" aria-label="Скачать историю CSV" data-icon="download"></button></div><div class="dialog-actions"><button type="button" id="disconnect" class="quiet-button">Отключить</button><button id="connect" class="primary-button" type="submit">Подключить <span data-icon="arrow"></span></button></div></form></dialog><div id="toast" role="status" aria-live="polite" class="toast" hidden></div></body></html>

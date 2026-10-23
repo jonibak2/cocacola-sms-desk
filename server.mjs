@@ -16,6 +16,11 @@ const server = createServer(async(req,res) => {
       const result = await handleProxy(request,{allowedOrigins:[origin,`http://localhost:${port}`]});
       res.writeHead(result.status,Object.fromEntries(result.headers)); res.end(Buffer.from(await result.arrayBuffer())); return;
     }
+    const asset = /^\/assets\/[a-z0-9/-]+\.svg$/.test(url.pathname);
+    if (asset && ['GET','HEAD'].includes(req.method)) {
+      const content = await readFile(fileURLToPath(new URL('./public'+url.pathname,import.meta.url)));
+      res.writeHead(200,{'Content-Type':'image/svg+xml','Cache-Control':'no-store'});res.end(content);return;
+    }
     const file = files.get(url.pathname);
     if (!file || !['GET','HEAD'].includes(req.method)) {res.writeHead(404);res.end('Not found');return;}
     const content = await readFile(fileURLToPath(new URL('./public/'+file,import.meta.url)));

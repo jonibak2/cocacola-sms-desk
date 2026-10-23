@@ -1,28 +1,22 @@
 import { SERVICE, COUNTRY, WAITING, statusLabels, isRelevant, normalize, rowsFrom, csvCell } from './model.js';
 
-const paths = {
-  refresh:'M20 7v5h-5M4 17v-5h5M6.1 8a7 7 0 0 1 11.6-2L20 9M4 15l2.3 3A7 7 0 0 0 18 16',
-  settings:'M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1 1-3ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
-  plus:'M12 5v14M5 12h14',arrow:'M5 12h14m-5-5 5 5-5 5',copy:'M9 8h10v13H9zM15 4V2H3v14h2',
-  message:'M21 4H3v13h5l4 4v-4h9V4ZM7 9h10M7 12h6',shield:'M12 2 3 6v6c0 5 9 10 9 10s9-5 9-10V6l-9-4Zm-4 9 3 3 5-5',
-  lock:'M6 10h12v11H6zM8 10V6a4 4 0 0 1 8 0v4',chevron:'m9 6 6 6-6 6','chevron-left':'m15 6-6 6 6 6',
-  search:'M10.5 17a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13ZM16 16l5 5',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',
-  history:'M3 11a9 9 0 1 1 2 7M3 4v7h7M12 7v5l3 2',close:'m6 6 12 12M6 18 18 6',play:'m9 5 11 7-11 7V5',
-};
-const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.arrow}"/></svg>`;
+const iconNames = {refresh:'arrow-clockwise',settings:'gear-six',copy:'copy',plus:'plus',refund:'arrow-counter-clockwise',close:'x',download:'download-simple',arrow:'caret-right',chevron:'caret-right','chevron-left':'caret-left',play:'play'};
+const icon = name => '<img class="icon" src="./assets/icons/'+(iconNames[name] || 'plus')+'.svg" alt="" aria-hidden="true">';
 document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = icon(el.dataset.icon); });
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = value => value == null || !Number.isFinite(Number(value)) ? '$ —' : '$' + Number(value).toFixed(2);
 const storage = { get(key, session = false) { try { return JSON.parse((session ? sessionStorage : localStorage).getItem(key)); } catch { return null; } }, set(key, value, session = false) { try { (session ? sessionStorage : localStorage).setItem(key, JSON.stringify(value)); return true; } catch { return false; } } };
 let prefs = storage.get('smsdesk.preferences') || {};
+if (!prefs.proxy && !['localhost','127.0.0.1'].includes(location.hostname)) prefs.proxy = 'https://cocacola-sms-proxy.jonibak2006.workers.dev';
+const refundBusy = new Set();
 let key = '', account = '', connected = false, demo = false, buying = false, uncertain = false, syncing = false, epoch = 0;
 let orders = new Map(), selected = '', filter = 'all', page = 1, pageSize = 4, balance = null, price = null, pollTimer, toastTimer, lastHistory = 0, lastBalance = 0, checkOffset = 0, pollDelay = 3000;
 let audio;
 const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 function proxyBase() { return prefs.proxy || (isLocal ? location.origin + '/api' : ''); }
 function notify(message, error = false) { $('toast').textContent = message; $('toast').classList.toggle('error', error); $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, error ? 9000 : 3000); }
-function setConnection(text, state = '') { $('connection').className = 'connection ' + state; $('connection').lastElementChild.textContent = text; $('poll-dot').className = state; }
+function setConnection(text, state = '') { $('connection').className = 'connection ' + state; $('connection').lastElementChild.textContent = text;  }
 function persist() { if (!demo && account && !storage.set('smsdesk.history.' + account, [...orders.values()])) notify('Хранилище браузера заполнено. Скачайте историю CSV.', true); }
 function beep() { if (!prefs.sound || !audio) return; try { const oscillator = audio.createOscillator(), gain = audio.createGain(); oscillator.connect(gain); gain.connect(audio.destination); oscillator.frequency.value = 820; gain.gain.setValueAtTime(.05, audio.currentTime); gain.gain.exponentialRampToValueAtTime(.001, audio.currentTime + .25); oscillator.start(); oscillator.stop(audio.currentTime + .25); } catch {} }
 function enableAudio() { if (!prefs.sound) return; try { audio ||= new AudioContext(); void audio.resume(); } catch {} }
@@ -51,36 +45,43 @@ const sorted = () => [...orders.values()].sort((a,b) => b.created - a.created ||
 function filtered() { const search = $('search').value.trim().toLowerCase(); return sorted().filter(order => (filter === 'all' || (filter === 'waiting' ? WAITING.has(order.status) : order.status === 'completed')) && (!search || [order.phone, order.code, order.id].some(value => value.toLowerCase().includes(search)))); }
 const badge = order => `<span class="status ${escape(order.status)}">${escape(statusLabels[order.status] || order.status)}</span>`;
 function render() {
-  $('balance').textContent = money(balance); $('price').textContent = money(price);
-  $('buy').disabled = buying || uncertain; $('settings').disabled = buying; $('demo').disabled = buying;
-  $('buy-label').textContent = buying ? 'Покупаем номер…' : uncertain ? 'Сначала проверьте заказы' : demo ? 'Купить демо-номер' : connected ? 'Купить номер' : 'Подключить SMSPool';
-  $('purchase-note').textContent = demo ? 'Демо. Реальные деньги не списываются.' : prefs.maxPrice ? `Лимит покупки: ${money(prefs.maxPrice)} за номер` : 'Одна кнопка — один номер. Без подписки.';
-  $('history-count').textContent = orders.size; $('waiting-count').textContent = [...orders.values()].filter(o => WAITING.has(o.status)).length;
-  const rows = filtered(), pages = Math.max(1, Math.ceil(rows.length / pageSize)); page = Math.min(page, pages);
-  const visible = rows.slice((page-1)*pageSize, page*pageSize);
-  $('history-body').innerHTML = visible.map((o,i) => `<tr data-order="${escape(o.id)}" class="${o.id === selected ? 'selected' : ''}" tabindex="0" aria-label="Открыть заказ ${escape(o.id)}"><td>${(page-1)*pageSize+i+1}</td><td><button class="table-copy" data-copy="${escape(o.phone)}" title="Скопировать номер">${escape(o.phone)}${icon('copy')}</button></td><td>${o.code ? `<button class="table-copy table-code" data-copy="${escape(o.code)}" title="Скопировать SMS-код">${escape(o.code)}${icon('copy')}</button>` : '<span class="waiting-code">— — —</span>'}</td><td>CocaCola</td><td><span class="table-country"><span class="israel-flag" aria-hidden="true">✡</span>IL</span></td><td>${badge(o)}</td><td>${money(o.cost)}</td><td><span class="row-arrow">${icon('arrow')}</span></td></tr>`).join('');
-  $('history-empty').hidden = rows.length > 0;
-  $('history-empty').querySelector('strong').textContent = orders.size ? 'Ничего не найдено' : 'История начинается с первого номера';
-  $('history-empty').lastElementChild.textContent = orders.size ? 'Измените поиск или фильтр.' : 'Ваши номера и полученные коды сохранятся здесь.';
-  $('rows-info').textContent = rows.length ? `${(page-1)*pageSize+1}–${Math.min(page*pageSize,rows.length)} из ${rows.length} номеров` : 'Пока нет заказов';
-  $('page-info').textContent = `${page} / ${pages}`; $('prev').disabled = page === 1; $('next').disabled = page >= pages; $('export').disabled = !orders.size;
+  $('balance').textContent = money(balance);
+  $('buy').disabled = buying || uncertain; $('new-order').disabled = buying || uncertain;
+  $('settings').disabled = buying; $('demo').disabled = buying;
+  $('circle').classList.toggle('buying',buying);
+  $('buy-label').textContent = buying ? 'Покупка…' : uncertain ? 'Проверьте заказы' : 'Купить номер Coca-Cola';
+  $('buy').title = uncertain ? 'Проверьте заказы кнопкой обновления' : 'Купить номер' + (price ? ' · '+money(price) : '');
+  $('demo-indicator').hidden = !demo;
+  const rows = filtered(), pages = Math.max(1,Math.ceil(rows.length/pageSize)); page = Math.min(page,pages);
+  $('history-body').innerHTML = rows.slice((page-1)*pageSize,page*pageSize).map(o => '<tr data-order="'+escape(o.id)+'" tabindex="0" class="'+(selected===o.id?'selected':'')+'" aria-label="Открыть заказ '+escape(o.id)+'"><td class="order-id">'+escape(o.id)+'</td><td><button class="table-copy phone" data-copy="'+escape(o.phone)+'" title="Скопировать номер">'+escape(o.phone)+icon('copy')+'</button></td><td>'+(o.code?'<button class="table-copy code" data-copy="'+escape(o.code)+'" title="Скопировать код">'+escape(o.code)+icon('copy')+'</button>':'<span class="dash">—</span>')+'</td><td>'+badge(o)+'</td><td class="cost">'+money(o.cost)+'</td><td><button class="refund" data-refund="'+escape(o.id)+'" '+(!canRefund(o)||refundBusy.has(o.id)?'disabled':'')+' title="'+(o.code?'Код уже получен':'Вернуть средства')+'">'+icon('refund')+'Refund</button></td></tr>').join('');
+  $('history-empty').hidden = rows.length>0;
+  $('rows-info').textContent = rows.length ? ((page-1)*pageSize+1)+'–'+Math.min(page*pageSize,rows.length)+' / '+rows.length : '';
+  $('page-info').textContent = page+' / '+pages; $('prev').disabled = page===1; $('next').disabled = page>=pages; $('export').disabled = !orders.size;
   renderCurrent();
 }
+function canRefund(order) { return Boolean(order && !order.code && WAITING.has(order.status)); }
 function renderCurrent() {
   const current = orders.get(selected) || sorted()[0];
-  $('current-empty').hidden = Boolean(current); $('current-order').hidden = !current;
+  $('buy').hidden = Boolean(current) && !buying;
+  $('current-order').hidden = !current || buying;
+  $('new-order').hidden = !current;
+  $('circle').classList.toggle('has-code',Boolean(current?.code));
   if (!current) return;
   selected = current.id;
-  $('current-status').outerHTML = `<span id="current-status" class="status ${escape(current.status)}">${escape(statusLabels[current.status] || current.status)}</span>`;
-  $('current-phone').textContent = current.phone; $('current-code').textContent = current.code || '••• •••';
-  $('copy-current-code').disabled = !current.code; $('current-id').textContent = 'Заказ ' + current.id;
-  $('code-caption').textContent = current.code ? 'Нажмите на код, чтобы скопировать' : WAITING.has(current.status) ? 'Проверяем каждые 3 секунды' : 'Заказ закрыт';
-  $('full-message').textContent = current.fullMessage || (current.code ? 'SMS-код получен' : WAITING.has(current.status) ? 'Ожидаем входящее сообщение…' : 'SMS не получено');
-  $('full-message').title = current.fullMessage;
-  $('cancel-order').hidden = !WAITING.has(current.status); updateCountdown();
+  $('current-phone').textContent = current.phone;
+  $('current-code').textContent = current.code;
+  $('copy-current-code').hidden = !current.code;
+  updateCountdown();
 }
-function updateCountdown() { const o = orders.get(selected); if (!o) return; const remaining = Math.max(0,Math.ceil(o.expires - Date.now()/1000)); $('countdown').textContent = WAITING.has(o.status) && o.expires ? remaining ? `Осталось ${Math.floor(remaining/60).toString().padStart(2,'0')}:${(remaining%60).toString().padStart(2,'0')}` : 'Проверяем статус…' : ''; }
-function fitRows() { const height = $('table-viewport').clientHeight, rowHeight = innerWidth <= 760 ? 43 : 49, header = innerWidth <= 760 ? 30 : 36; const size = Math.max(1, Math.floor((height-header)/rowHeight)); if (size !== pageSize) { pageSize = size; render(); } }
+function updateCountdown() {
+  const o = orders.get(selected); if (!o) return;
+  const seconds = Math.max(0,Math.ceil(o.expires-Date.now()/1000));
+  $('countdown').textContent = !o.code && WAITING.has(o.status) && o.expires ? Math.floor(seconds/60).toString().padStart(2,'0')+':'+(seconds%60).toString().padStart(2,'0') : '';
+}
+function fitRows() {
+  const size = Math.max(1,Math.floor(($('table-viewport').clientHeight-44)/64));
+  if(size!==pageSize){pageSize=size;render();}
+}
 async function copy(text) { if (!text) return; try { await navigator.clipboard.writeText(text); notify('Скопировано: ' + text); } catch { notify('Не удалось скопировать. Разрешите доступ к буферу обмена в браузере.', true); } }
 async function syncBalance(token) { const result = await api('/request/balance'); const number = Number(result.balance); if (result.balance == null || result.balance === '' || !Number.isFinite(number)) throw new Error('Не удалось прочитать баланс SMSPool.'); if (token === epoch) { balance = number; lastBalance = Date.now(); } }
 async function syncHistory(token, all = false) {
@@ -108,13 +109,13 @@ async function refresh(manual = false) {
     if (token !== epoch) return;
     pollDelay = 3000;
     if (manual) uncertain = false;
-    setConnection('SMSPool подключён','connected'); $('last-sync').textContent = 'Обновлено ' + new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    $('poll-label').textContent = 'Автообновление каждые 3 секунды'; render();
-  } catch(error) { if (token !== epoch) return; pollDelay = Math.min(60000,Math.max(error.rateLimited ? 15000 : 6000,pollDelay * 2)); setConnection('Ошибка связи','error'); $('poll-label').textContent = `Повторная проверка через ${pollDelay/1000} сек.`; if (manual) notify(error.message, true); }
+    setConnection('SMSPool подключён','connected');
+     render();
+  } catch(error) { if (token !== epoch) return; pollDelay = Math.min(60000,Math.max(error.rateLimited ? 15000 : 6000,pollDelay * 2)); setConnection('Ошибка связи','error');  if (manual) notify(error.message, true); }
   finally { if (token === epoch) { syncing = false; $('refresh').classList.remove('spinning'); schedulePoll(pollDelay); } }
 }
 function schedulePoll(delay = 3000) { clearTimeout(pollTimer); if (connected && !demo) pollTimer = setTimeout(() => { void refresh(); }, delay); }
-function resetSession() { epoch++; clearTimeout(pollTimer); connected = false; demo = false; syncing = false; buying = false; uncertain = false; key = ''; account = ''; orders = new Map(); selected = ''; balance = null; price = null; lastHistory = 0; lastBalance = 0; pollDelay = 3000; page = 1; filter = 'all'; $('search').value = ''; document.querySelectorAll('[data-filter]').forEach(button => button.classList.toggle('active',button.dataset.filter === 'all')); try { sessionStorage.removeItem('smsdesk.session'); } catch {} document.body.classList.remove('demo-mode'); $('refresh').classList.remove('spinning'); setConnection('Не подключено'); $('last-sync').textContent = 'Ожидаем подключения'; $('poll-label').textContent = 'Автоматическое получение кода'; render(); }
+function resetSession() { epoch++; clearTimeout(pollTimer); connected = false; demo = false; syncing = false; buying = false; uncertain = false; key = ''; account = ''; orders = new Map(); selected = ''; balance = null; price = null; lastHistory = 0; lastBalance = 0; pollDelay = 3000; page = 1; filter = 'all'; $('search').value = ''; document.querySelectorAll('[data-filter]').forEach(button => button.classList.toggle('active',button.dataset.filter === 'all')); try { sessionStorage.removeItem('smsdesk.session'); } catch {} document.body.classList.remove('demo-mode'); $('refresh').classList.remove('spinning'); setConnection('Не подключено');   render(); }
 function openSettings() { $('api-key').value = key; $('proxy-url').value = prefs.proxy || ''; $('max-price').value = prefs.maxPrice || ''; $('sound').checked = prefs.sound !== false; $('settings-error').textContent = ''; $('disconnect').disabled = !connected && !demo; $('settings-dialog').showModal(); }
 async function connectAccount(newKey, newPrefs, restore = false) {
   resetSession(); key = newKey; prefs = newPrefs; const token = epoch;
@@ -157,16 +158,21 @@ $('buy').onclick = async () => {
   } catch(error) { if (token === epoch) { uncertain = Boolean(error.uncertain); notify(error.message,true); } }
   finally { if (token === epoch) { buying = false; render(); schedulePoll(); } }
 };
-$('cancel-order').onclick = async () => {
-  const order = orders.get(selected); if (!order || !WAITING.has(order.status)) return;
-  const token = epoch; $('cancel-order').disabled = true;
-  try { if (!demo) { const result = await api('/sms/cancel',{orderid:order.id}); if (String(result.success) !== '1') throw new Error('SMSPool не подтвердил отмену заказа.'); } if (token !== epoch) return; orders.set(order.id,{...order,status:'refunded'}); if (demo) balance += order.cost || 0; persist(); render(); notify('Номер отменён, средства возвращены'); if (!demo) await syncBalance(token); }
-  catch(error) { if (token === epoch) notify(error.message,true); }
-  finally { if (token === epoch) { $('cancel-order').disabled = false; render(); } }
-};
+async function refund(id) {
+  const order=orders.get(id); if(!canRefund(order)||refundBusy.has(id))return;
+  const token=epoch;refundBusy.add(id);render();
+  try {
+    if(!demo){const result=await api('/sms/cancel',{orderid:id});if(String(result.success)!=='1')throw new Error('SMSPool не подтвердил возврат.');}
+    if(token!==epoch)return;
+    orders.set(id,{...orders.get(id),status:'refunded'});if(demo)balance+=order.cost||0;
+    persist();notify('Возврат выполнен');if(!demo)await syncBalance(token);
+  }catch(error){if(token===epoch)notify(error.message,true);}
+  finally{refundBusy.delete(id);if(token===epoch)render();}
+}
+$('new-order').onclick=()=>$('buy').onclick();
 $('copy-current-phone').onclick = () => copy(orders.get(selected)?.phone);
 $('copy-current-code').onclick = () => copy(orders.get(selected)?.code);
-$('history-body').onclick = event => { const button = event.target.closest('[data-copy]'); if (button) { void copy(button.dataset.copy); return; } const row = event.target.closest('[data-order]'); if (row) { selected = row.dataset.order; render(); } };
+$('history-body').onclick = event => { const refundButton = event.target.closest('[data-refund]'); if(refundButton){void refund(refundButton.dataset.refund);return;} const button = event.target.closest('[data-copy]'); if (button) { void copy(button.dataset.copy); return; } const row = event.target.closest('[data-order]'); if (row) { selected = row.dataset.order; render(); } };
 $('history-body').onkeydown = event => { if (event.target.matches('tr') && ['Enter',' '].includes(event.key)) { event.preventDefault(); selected = event.target.dataset.order; render(); } };
 function setFilter(value) { filter = value; page = 1; document.querySelectorAll('[data-filter]').forEach(button => button.classList.toggle('active',button.dataset.filter === value)); render(); }
 document.querySelectorAll('[data-filter]').forEach(button => { button.onclick = () => setFilter(button.dataset.filter); });
@@ -180,11 +186,11 @@ function loadDemo() {
   resetSession(); demo = true; prefs.sound ??= true; enableAudio(); document.body.classList.add('demo-mode'); balance = 24.63; price = .37; setConnection('Демо · без списаний');
   const now = Date.now();
   for (let i = 0; i < 18; i++) { const id = 'DEMO'+String(18-i).padStart(3,'0'), status = i === 0 || i === 3 ? 'pending' : i === 5 || i === 9 ? 'expired' : 'completed'; orders.set(id,{id,phone:'+97253'+String(2411034+i*137).padStart(7,'0'),code:status === 'completed' ? ['715017','093246','382149','820614'][i%4] : '',status,cost:.37,fullMessage:status === 'completed' ? 'Coca-Cola: ваш код подтверждения '+['715017','093246','382149','820614'][i%4] : '',expires:now/1000+987-i*10,created:now-i*360000}); }
-  selected = 'DEMO018'; $('last-sync').textContent = 'Демонстрационные данные'; $('poll-label').textContent = 'Демо · тестовое SMS через 6 секунд'; render();
+  selected = 'DEMO018';   render();
   const token = epoch; setTimeout(() => { if (demo && token === epoch && WAITING.has(orders.get('DEMO018')?.status)) { merge({order_id:'DEMO018',status:3,sms:'715017',full_sms:'Coca-Cola: ваш код подтверждения 715017'},true); render(); } },6000);
 }
 function buyDemo() { const id = 'DEMO'+Date.now(), token = epoch; orders.set(id,{id,phone:'+972539000123',code:'',status:'pending',cost:.37,expires:Date.now()/1000+1200,created:Date.now(),fullMessage:''}); selected = id; balance = Math.round((balance-.37)*100)/100; page = 1; render(); notify('Демо-номер добавлен. Код появится через 6 секунд.'); setTimeout(() => { if (demo && token === epoch && WAITING.has(orders.get(id)?.status)) { merge({order_id:id,status:3,sms:'008421',full_sms:'Coca-Cola: ваш код подтверждения 008421'},true); render(); } },6000); }
-$('demo').onclick = () => { if (buying) return; if (demo) { resetSession(); render(); } else { enableAudio(); loadDemo(); } };
+$('demo').onclick = () => { if (buying) return; $('settings-dialog').close(); if (demo) { resetSession(); render(); } else { enableAudio(); loadDemo(); } };
 new ResizeObserver(fitRows).observe($('table-viewport')); setInterval(updateCountdown,1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && connected && !demo) void refresh(); });
 render();
