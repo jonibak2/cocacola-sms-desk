@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalize,phoneNumber,isRelevant,rowsFrom,csvCell} from '../public/model.js';
+import {refundAvailable,normalize,phoneNumber,isRelevant,rowsFrom,csvCell} from '../public/model.js';
 
 test('leading zero SMS codes survive all response formats and refreshes',() => {
   const first = normalize({order_id:'ORDER',phonenumber:'0532411034',status:'pending',code:'0',cost:'.37'});
@@ -37,4 +37,14 @@ test('CSV export escapes quotes and prevents spreadsheet formulas',() => {
   assert.equal(csvCell('008421'),'"008421"');
   assert.equal(csvCell('="test"'),'"\'=""test"""');
   assert.equal(csvCell('+972532411034'),'"\'+972532411034"');
+});
+
+test('refund unlocks at 60 seconds and never for received codes or closed orders',() => {
+  const now=100000, order={created:now,status:'pending',code:''};
+  assert.equal(refundAvailable(order,now),false);
+  assert.equal(refundAvailable(order,now+59999),false);
+  assert.equal(refundAvailable(order,now+60000),true);
+  assert.equal(refundAvailable({...order,code:'008421'},now+60000),false);
+  for(const status of ['completed','refunded','cancelled','expired']) assert.equal(refundAvailable({...order,status},now+120000),false);
+  assert.equal(refundAvailable({...order,created:undefined},now+120000),false);
 });
