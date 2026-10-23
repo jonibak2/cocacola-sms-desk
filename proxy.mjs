@@ -18,7 +18,8 @@ export async function handleProxy(request, { allowedOrigins = [], fetcher = fetc
     if (form.get('country') !== 'IL' || form.get('service') !== '1244' || form.get('quantity') !== '1') return failure('Only one Israel CocaCola number is supported',400,cors);
   }
   try {
-    const response = await fetcher('https://api.smspool.net'+path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},body:form.toString(),redirect:'error',signal:AbortSignal.timeout(40000)});
+    const response = await fetcher('https://api.smspool.net'+path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},body:form.toString(),redirect:'manual',signal:AbortSignal.timeout(40000)});
+    if (response.status >= 300 && response.status < 400) return failure('Unexpected SMSPool redirect. Check order history before purchasing again.',502,cors);
     const body = await response.text();
     try { JSON.parse(body); } catch { return failure('SMSPool returned an invalid response. Check order history before purchasing again.',502,cors); }
     return new Response(body,{status:response.status,headers:{...securityHeaders,...cors,'Content-Type':'application/json; charset=utf-8'}});

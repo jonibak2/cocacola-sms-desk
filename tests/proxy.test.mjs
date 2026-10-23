@@ -5,7 +5,7 @@ const origin = 'https://example.github.io';
 function request(path,params={},requestOrigin=origin) { return new Request('https://proxy.example'+path,{method:'POST',headers:{Origin:requestOrigin},body:new URLSearchParams({key:'test-key',...params})}); }
 test('proxy forwards form data only to the fixed SMSPool API and sets CORS',async() => {
   let calls = 0;
-  const response = await handleProxy(request('/request/balance'),{allowedOrigins:[origin],fetcher:async(url,options) => { calls++; assert.equal(url,'https://api.smspool.net/request/balance'); assert.equal(new URLSearchParams(options.body).get('key'),'test-key'); assert.equal(options.redirect,'error'); return Response.json({balance:'5.00'}); }});
+  const response = await handleProxy(request('/request/balance'),{allowedOrigins:[origin],fetcher:async(url,options) => { calls++; assert.equal(url,'https://api.smspool.net/request/balance'); assert.equal(new URLSearchParams(options.body).get('key'),'test-key'); assert.equal(options.redirect,'manual'); return Response.json({balance:'5.00'}); }});
   assert.equal(calls,1); assert.equal(response.headers.get('Access-Control-Allow-Origin'),origin); assert.equal(response.headers.get('Cache-Control'),'no-store'); assert.deepEqual(await response.json(),{balance:'5.00'});
 });
 test('proxy rejects foreign origins and unknown endpoints without upstream requests',async() => {
@@ -27,4 +27,13 @@ test('HTML upstream error becomes a structured 502',async() => {
 });
 test('preflight permits only the configured origin',async() => {
   const response=await handleProxy(new Request('https://proxy.example/request/balance',{method:'OPTIONS',headers:{Origin:origin}}),{allowedOrigins:[origin]});assert.equal(response.status,204);assert.equal(response.headers.get('Access-Control-Allow-Origin'),origin);
+});
+test('Workers-compatible manual redirect mode rejects redirects without forwarding credentials',async() => {
+  let calls=0;
+  const response=await handleProxy(request('/request/balance'),{allowedOrigins:[origin],fetcher:async(url,options) => {
+    calls++; assert.equal(options.redirect,'manual');
+    return new Response(null,{status:307,headers:{Location:'https://other.example'}});
+  }});
+  assert.equal(calls,1);assert.equal(response.status,502);
+  assert.match((await response.json()).message,/redirect/);
 });
