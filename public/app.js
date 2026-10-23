@@ -1,4 +1,4 @@
-import { SERVICE, COUNTRY, WAITING, refundAvailable, statusLabels, isRelevant, normalize, rowsFrom, csvCell } from './model.js';
+import { SERVICE, COUNTRY, WAITING, orderSummary, refundAvailable, statusLabels, isRelevant, normalize, rowsFrom, csvCell } from './model.js';
 
 const iconNames = {refresh:'arrow-clockwise',settings:'gear-six',copy:'copy',plus:'plus',refund:'arrow-counter-clockwise',close:'x',download:'download-simple',arrow:'caret-right',chevron:'caret-right','chevron-left':'caret-left',play:'play'};
 const icon = name => '<img class="icon" src="./assets/icons/'+(iconNames[name] || 'plus')+'.svg" alt="" aria-hidden="true">';
@@ -47,6 +47,12 @@ function filtered() { const search = $('search').value.trim().toLowerCase(); ret
 const badge = order => `<span class="status ${escape(order.status)}">${escape(statusLabels[order.status] || order.status)}</span>`;
 function render() {
   $('balance').textContent = money(balance);
+  const summary = orderSummary([...orders.values()], balance, price);
+  $('confirmed-count').textContent = summary.confirmedCount;
+  $('confirmed-cost').textContent = money(summary.totalCost);
+  $('average-price').textContent = money(summary.averagePrice);
+  $('affordable-count').textContent = summary.affordable == null ? '—' : '≈ '+summary.affordable;
+  const rowNumbers = new Map(sorted().map((order,index) => [order.id,index+1]));
   $('buy').disabled = buying || uncertain; $('new-order').disabled = buying || uncertain;
   $('settings').disabled = buying; $('demo').disabled = buying;
   $('circle').classList.toggle('buying',buying);
@@ -54,9 +60,8 @@ function render() {
   $('buy').title = uncertain ? 'Refresh your orders first' : 'Buy a number' + (price ? ' · '+money(price) : '');
   $('demo-indicator').hidden = !demo;
   const rows = filtered(), pages = Math.max(1,Math.ceil(rows.length/pageSize)); page = Math.min(page,pages);
-  $('history-body').innerHTML = rows.slice((page-1)*pageSize,page*pageSize).map(o => '<tr data-order="'+escape(o.id)+'" tabindex="0" class="'+(selected===o.id?'selected':'')+'" aria-label="Select order '+escape(o.id)+'"><td class="order-id">'+escape(o.id)+'</td><td><button class="table-copy phone" data-copy="'+escape(o.phone)+'" title="Copy phone number">'+escape(o.phone)+icon('copy')+'</button></td><td>'+(o.code?'<button class="table-copy code" data-copy="'+escape(o.code)+'" title="Copy code">'+escape(o.code)+icon('copy')+'</button>':'<span class="dash">—</span>')+'</td><td>'+badge(o)+'</td><td class="cost">'+money(o.cost)+'</td><td><button class="refund" data-refund="'+escape(o.id)+'" '+(!canRefund(o)||refundBusy.has(o.id)?'disabled':'')+' title="'+(o.code?'Code already received':'Request refund')+'">'+icon('refund')+'<span class="refund-label">Refund</span></button></td></tr>').join('');
+  $('history-body').innerHTML = rows.slice((page-1)*pageSize,page*pageSize).map(o => '<tr data-order="'+escape(o.id)+'" tabindex="0" class="'+(selected===o.id?'selected':'')+'" aria-label="Select order '+escape(o.id)+'"><td class="order-id" title="'+escape(o.id)+'">'+rowNumbers.get(o.id)+'</td><td><button class="table-copy phone" data-copy="'+escape(o.phone)+'" title="Copy phone number">'+escape(o.phone)+icon('copy')+'</button></td><td>'+(o.code?'<button class="table-copy code" data-copy="'+escape(o.code)+'" title="Copy code">'+escape(o.code)+icon('copy')+'</button>':'<span class="dash">—</span>')+'</td><td>'+badge(o)+'</td><td class="cost">'+money(o.cost)+'</td><td><button class="refund" data-refund="'+escape(o.id)+'" '+(!canRefund(o)||refundBusy.has(o.id)?'disabled':'')+' title="'+(o.code?'Code already received':'Request refund')+'">'+icon('refund')+'<span class="refund-label">Refund</span></button></td></tr>').join('');
   $('history-empty').hidden = rows.length>0;
-  $('rows-info').textContent = rows.length ? ((page-1)*pageSize+1)+'–'+Math.min(page*pageSize,rows.length)+' / '+rows.length : '';
   $('page-info').textContent = page+' / '+pages; $('prev').disabled = page===1; $('next').disabled = page>=pages; $('export').disabled = !orders.size;
   renderCurrent();
   updateCountdown();
@@ -82,6 +87,7 @@ function updateCountdown() {
     if (!order) return;
     const seconds = refundSeconds(order);
     button.disabled = !canRefund(order) || refundBusy.has(order.id);
+    if (!order.code && WAITING.has(order.status) && seconds) button.dataset.wait = seconds+'s'; else delete button.dataset.wait;
     button.title = order.code ? 'Code already received' : seconds && WAITING.has(order.status) ? 'Refund available in '+seconds+'s' : 'Request refund';
     button.querySelector('.refund-label').textContent = !order.code && WAITING.has(order.status) && seconds ? 'Refund · '+seconds+'s' : 'Refund';
   });
@@ -90,7 +96,11 @@ function updateCountdown() {
   $('countdown').textContent = !o.code && WAITING.has(o.status) && o.expires ? Math.floor(seconds/60).toString().padStart(2,'0')+':'+(seconds%60).toString().padStart(2,'0') : '';
 }
 function fitRows() {
-  const size = Math.max(1,Math.floor(($('table-viewport').clientHeight-44)/64));
+  const viewport = $('table-viewport');
+  const style = getComputedStyle(viewport);
+  const rowHeight = parseFloat(style.getPropertyValue('--row-height')) || 64;
+  const headerHeight = parseFloat(style.getPropertyValue('--header-height')) || 44;
+  const size = Math.max(1,Math.floor((viewport.clientHeight-headerHeight)/rowHeight));
   if(size!==pageSize){pageSize=size;render();}
 }
 async function copy(text) { if (!text) return; try { await navigator.clipboard.writeText(text); notify('Copied: ' + text); } catch { notify('Could not copy. Allow clipboard access in your browser.', true); } }

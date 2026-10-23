@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {refundAvailable,normalize,phoneNumber,isRelevant,rowsFrom,csvCell} from '../public/model.js';
+import {orderSummary,refundAvailable,normalize,phoneNumber,isRelevant,rowsFrom,csvCell} from '../public/model.js';
 
 test('leading zero SMS codes survive all response formats and refreshes',() => {
   const first = normalize({order_id:'ORDER',phonenumber:'0532411034',status:'pending',code:'0',cost:'.37'});
@@ -47,4 +47,14 @@ test('refund unlocks at 60 seconds and never for received codes or closed orders
   assert.equal(refundAvailable({...order,code:'008421'},now+60000),false);
   for(const status of ['completed','refunded','cancelled','expired']) assert.equal(refundAvailable({...order,status},now+120000),false);
   assert.equal(refundAvailable({...order,created:undefined},now+120000),false);
+});
+
+test('purchase totals count confirmed codes and estimate buying capacity with average paid price',() => {
+  const orders=[{status:'completed',code:'001234',cost:.37},{status:'completed',code:'654321',cost:.43},{status:'pending',code:'',cost:.50},{status:'refunded',code:'',cost:.99},{status:'completed',code:'',cost:.30}];
+  assert.deepEqual(orderSummary(orders,2,.5),{confirmedCount:2,totalCost:.8,averagePrice:.4,affordable:5});
+  assert.deepEqual(orderSummary([],null),{confirmedCount:0,totalCost:0,averagePrice:null,affordable:null});
+  assert.equal(orderSummary([],1,.3).affordable,3);
+  assert.equal(orderSummary([{status:'completed',code:'123456',cost:.1}],.3).affordable,3);
+  const missing=orderSummary([{status:'completed',code:'123456',cost:null}],1);
+  assert.equal(missing.confirmedCount,1);assert.equal(missing.totalCost,null);assert.equal(missing.averagePrice,null);assert.equal(missing.affordable,null);
 });

@@ -44,3 +44,12 @@ export function csvCell(value) {
 export function refundAvailable(order, now = Date.now()) {
   return Boolean(order && !order.code && WAITING.has(order.status) && Number.isFinite(order.created) && now >= order.created + 60000);
 }
+
+export function orderSummary(orders, balance, currentPrice = null) {
+  const confirmed = orders.filter(order => order.status === 'completed' && Boolean(order.code));
+  const priced = confirmed.filter(order => typeof order.cost === 'number' && Number.isFinite(order.cost) && order.cost >= 0);
+  const cents = priced.reduce((sum,order) => sum + Math.round(order.cost * 100), 0);
+  const averagePrice = priced.length ? cents / priced.length / 100 : typeof currentPrice === 'number' && currentPrice > 0 ? currentPrice : null;
+  const affordable = typeof balance === 'number' && Number.isFinite(balance) && averagePrice > 0 ? Math.max(0, Math.floor((Math.round(balance * 100) / (averagePrice * 100)) + 1e-9)) : null;
+  return { confirmedCount:confirmed.length, totalCost:priced.length === confirmed.length ? cents / 100 : null, averagePrice, affordable };
+}
