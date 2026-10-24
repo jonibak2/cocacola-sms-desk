@@ -23,7 +23,7 @@ for(const hostname of ['jonibak2.github.io','cocacola-sms-proxy.jonibak2006.work
     const browserStorage={getItem:key=>stored.get(key)||null,setItem:(key,value)=>stored.set(key,value),removeItem:key=>stored.delete(key)};
     const context=vm.createContext({
       ...model,location:{hostname,origin:'https://'+hostname},crypto,
-      document:{getElementById:element,querySelectorAll:()=>[],querySelector:element,addEventListener(){},body:element('body')},
+      document:{getElementById:element,querySelectorAll:()=>[],querySelector:element,addEventListener(){},body:element('body'),documentElement:element('html')},
       localStorage:browserStorage,sessionStorage:browserStorage,
       getComputedStyle:()=>({getPropertyValue:()=>'',minHeight:'300px'}),
       ResizeObserver:class{observe(){}},setTimeout:()=>1,clearTimeout(){},setInterval(){},

@@ -42,3 +42,47 @@ body{background:#fff;overflow-x:hidden}.topbar{border-color:#17171718}.circle,.c
 .circle{--circle-size:clamp(290px,36vh,390px);width:var(--circle-size);height:var(--circle-size);flex-shrink:0}
 .stage{min-height:calc(clamp(290px,36vh,390px) + 64px)}
 @media(max-width:650px){.circle{--circle-size:min(74vw,300px,36dvh)}.stage{min-height:calc(min(74vw,300px,36dvh) + 58px)}}
+
+/* Saved light/dark appearance and compact theme switch. */
+:root{--surface:#fff;--ink:#171717;--muted:#777;--panel:#e8e8e8;--divider:#00000027;--input:#f1f1f1;color-scheme:light}
+:root[data-theme="dark"]{--surface:#111;--ink:#f3f3f3;--muted:#aaa;--panel:#242424;--divider:#ffffff27;--input:#303030;color-scheme:dark}
+html,body{background:var(--surface);color:var(--ink)}
+.history,.history:before{background:var(--panel)}.history{color:var(--ink)}
+dialog{background:var(--surface);color:var(--ink)}
+.field,.checkbox-field{color:var(--muted)}.field input,.quiet-button{background:var(--input);color:var(--ink)}
+.history tbody td{border-top-color:var(--divider)}.history tbody tr:last-child{box-shadow:inset 0 -2px var(--divider)}
+[data-theme="dark"] .topbar,[data-theme="dark"] .table-viewport,[data-theme="dark"] .history-footer{border-color:var(--divider)}
+[data-theme="dark"] .topbar .icon,[data-theme="dark"] .history .icon,[data-theme="dark"] dialog .icon{filter:invert(1)}
+[data-theme="dark"] .history .status.completed .icon{filter:invert(73%) sepia(46%) saturate(470%) hue-rotate(93deg)}
+[data-theme="dark"] .history .status.cancelled .icon{filter:invert(55%) sepia(70%) saturate(1000%) hue-rotate(320deg)}
+[data-theme="dark"] th,[data-theme="dark"] .order-id,[data-theme="dark"] .history-footer{color:#aaa}
+[data-theme="dark"] .history tbody tr:nth-child(even){background:#ffffff04}
+[data-theme="dark"] tbody tr:hover,[data-theme="dark"] tbody tr.selected,[data-theme="dark"] .icon-button:hover:not(:disabled),[data-theme="dark"] .history .refund:hover:not(:disabled){background:#ffffff0a}
+[data-theme="dark"] .refund[data-wait]:after{color:#bbb}
+.top-actions{align-items:center}
+.theme-toggle{position:relative;width:44px;height:25px;padding:0;margin-right:5px;border:1px solid #0002;border-radius:24px;background:#e7e7e7;flex-shrink:0}
+.theme-thumb{position:absolute;display:grid;place-items:center;left:2px;top:2px;width:19px;height:19px;background:#fff;border-radius:50%;box-shadow:0 1px 3px #0002;transition:transform .25s ease}
+.theme-toggle .icon{width:12px;height:12px;filter:none}
+.theme-moon{position:absolute;right:5px;top:5px;display:flex;opacity:.4;pointer-events:none}
+.theme-toggle[aria-checked="true"]{background:#e51b2b;border-color:#e51b2b}
+.theme-toggle[aria-checked="true"] .theme-thumb{transform:translateX(19px)}
+.theme-toggle[aria-checked="true"] .theme-thumb .icon{opacity:0}
+.theme-toggle[aria-checked="true"] .theme-moon{opacity:1}
+.theme-toggle[aria-checked="true"] .theme-moon .icon{filter:none}
+.confirm-dialog h2{font-size:22px;margin:0 0 12px;font-weight:600}
+.confirm-dialog p{font-size:14px;line-height:1.6;color:var(--muted);margin:0 0 16px}
+.confirm-detail{background:var(--input);padding:14px;border-radius:10px;font-size:15px;font-variant-numeric:tabular-nums;line-height:1.5;direction:ltr}
+.confirm-dialog .dialog-actions{gap:12px;margin-top:24px}.confirm-dialog .dialog-actions>button{justify-content:center;flex:1;min-height:44px}
+body,.history,.history:before,.topbar,.field input,.quiet-button,dialog,.theme-toggle{transition:background-color .25s ease,color .25s ease,border-color .25s ease}
+button{transition:background-color .2s ease,opacity .2s ease,transform .2s ease}
+.primary-button:hover:not(:disabled){background:#ca1524}.primary-button:active:not(:disabled),.icon-button:active:not(:disabled){transform:scale(.94)}
+dialog[open]{animation:dialog-in .2s ease-out}.toast{animation:toast-in .2s ease-out}
+@keyframes dialog-in{from{opacity:0;translate:0 8px;scale:.97}to{opacity:1;translate:0 0;scale:1}}
+@keyframes toast-in{from{opacity:0;translate:0 7px}to{opacity:1;translate:0 0}}
+@media(max-width:650px){
+ .history tbody tr{border-top-color:var(--divider)}.history tbody td{border-top:0}
+ .history tbody td:nth-child(6){display:flex;align-items:center;justify-content:center;align-self:stretch}
+ .history .refund,.history .refund[data-wait]{position:relative;display:flex;width:100%;min-width:0;height:100%;min-height:0;align-items:center;justify-content:center;padding:0}
+ .refund[data-wait]:after{position:absolute;bottom:-2px;left:0;right:0;text-align:center}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

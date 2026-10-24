@@ -1,6 +1,6 @@
-import { SERVICE, COUNTRY, WAITING, sortOrders, circleOrder, orderSummary, refundAvailable, statusLabels, isRelevant, normalize, rowsFrom, csvCell } from './model.js';
+import { SERVICE, COUNTRY, WAITING, phoneNumber, sortOrders, circleOrder, orderSummary, refundAvailable, statusLabels, isRelevant, normalize, rowsFrom, csvCell } from './model.js';
 
-const iconNames = {wallet:'wallet',can:'cylinder',average:'coins',spent:'receipt',hash:'hash',phone:'phone',key:'key',pending:'clock',completed:'check-circle',expired:'hourglass',cancelled:'prohibit',refunded:'arrow-counter-clockwise',activating:'spinner-gap',processing:'spinner-gap',resend:'arrows-clockwise',refresh:'arrow-clockwise',settings:'gear-six',copy:'copy',plus:'plus',refund:'arrow-counter-clockwise',close:'x',download:'download-simple',arrow:'caret-right',chevron:'caret-right','chevron-left':'caret-left',play:'play'};
+const iconNames = {wallet:'wallet',can:'cylinder',average:'coins',spent:'receipt',hash:'hash',phone:'phone',key:'key',pending:'clock',completed:'check-circle',expired:'hourglass',cancelled:'prohibit',refunded:'currency-circle-dollar',activating:'spinner-gap',processing:'spinner-gap',resend:'arrows-clockwise',refresh:'arrow-clockwise',settings:'gear-six',copy:'copy',plus:'plus',refund:'arrow-counter-clockwise',close:'x',download:'download-simple',arrow:'caret-right',chevron:'caret-right','chevron-left':'caret-left',play:'play',moon:'moon',sun:'sun'};
 const icon = name => '<img class="icon" src="./assets/icons/'+(iconNames[name] || 'plus')+'.svg" alt="" aria-hidden="true">';
 document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = icon(el.dataset.icon); });
 const $ = id => document.getElementById(id);
@@ -8,11 +8,43 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp
 const money = value => value == null || !Number.isFinite(Number(value)) ? '$ —' : '$' + Number(value).toFixed(2);
 const storage = { get(key, session = false) { try { return JSON.parse((session ? sessionStorage : localStorage).getItem(key)); } catch { return null; } }, set(key, value, session = false) { try { (session ? sessionStorage : localStorage).setItem(key, JSON.stringify(value)); return true; } catch { return false; } } };
 let prefs = storage.get('smsdesk.preferences') || {};
+function applyTheme(dark) {
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  $('theme-toggle').setAttribute('aria-checked',String(dark));
+  document.querySelector('meta[name="theme-color"]').content = dark ? '#111111' : '#ffffff';
+}
+applyTheme(storage.get('smsdesk.theme') === 'dark');
+$('theme-toggle').onclick = () => {
+  const dark = document.documentElement.dataset.theme !== 'dark';
+  applyTheme(dark);
+  storage.set('smsdesk.theme',dark ? 'dark' : 'light');
+};
 if (!prefs.proxy && !['localhost','127.0.0.1'].includes(location.hostname)) prefs.proxy = 'https://cocacola-sms-proxy.jonibak2006.workers.dev';
 const refundBusy = new Set();
 let key = '', account = '', connected = false, demo = false, buying = false, uncertain = false, syncing = false, epoch = 0;
 let orders = new Map(), selected = '', filter = 'all', page = 1, pageSize = 4, balance = null, price = null, pollTimer, toastTimer, lastHistory = 0, lastBalance = 0, checkOffset = 0, pollDelay = 3000;
 let audio;
+let confirmResolver = null, historySignature = '', circleSignature = '';
+function animateChange(element) {
+  if (typeof element.animate !== 'function' || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+  element.animate([{opacity:.35,translate:'0 5px'},{opacity:1,translate:'0 0'}],{duration:220,easing:'ease-out'});
+}
+function confirmAction({title,message,detail,action}) {
+  if (confirmResolver) return Promise.resolve(false);
+  $('confirm-title').textContent = title;
+  $('confirm-message').textContent = message;
+  $('confirm-detail').textContent = detail;
+  $('confirm-submit').textContent = action;
+  $('confirm-dialog').returnValue = 'cancel';
+  const answer = new Promise(resolve => { confirmResolver = resolve; });
+  $('confirm-dialog').showModal();
+  return answer;
+}
+$('confirm-dialog').addEventListener('close',() => {
+  const resolve = confirmResolver;
+  confirmResolver = null;
+  resolve?.($('confirm-dialog').returnValue === 'confirm');
+});
 let serverManaged = false;
 const isWorkerApp = location.hostname === 'cocacola-sms-proxy.jonibak2006.workers.dev';
 let activeOrderId = ''; // Only a purchase made on this page may occupy the circle.
@@ -62,7 +94,11 @@ function render() {
   $('buy').title = uncertain ? 'Refresh your orders first' : 'Buy a number' + (price ? ' · '+money(price) : '');
   $('demo-indicator').hidden = !demo;
   const rows = filtered(), pages = Math.max(1,Math.ceil(rows.length/pageSize)); page = Math.min(page,pages);
+  const signature = JSON.stringify([page,pageSize,rows.map(o => [o.id,o.status,o.code,o.phone,o.cost])]);
+  const historyChanged = signature !== historySignature;
+  historySignature = signature;
   $('history-body').innerHTML = rows.slice((page-1)*pageSize,page*pageSize).map(o => '<tr data-order="'+escape(o.id)+'" tabindex="0" class="'+(selected===o.id?'selected':'')+'" aria-label="Select order '+escape(o.id)+'"><td class="order-id" title="'+escape(o.id)+'">'+rowNumbers.get(o.id)+'</td><td><button class="table-copy phone" data-copy="'+escape(o.phone)+'" title="Copy phone number">'+escape(o.phone)+icon('copy')+'</button></td><td>'+(o.code?'<button class="table-copy code" data-copy="'+escape(o.code)+'" title="Copy code">'+escape(o.code)+icon('copy')+'</button>':'<span class="dash">—</span>')+'</td><td>'+badge(o)+'</td><td class="cost">'+money(o.cost)+'</td><td><button class="refund" data-refund="'+escape(o.id)+'" '+(!canRefund(o)||refundBusy.has(o.id)?'disabled':'')+' title="'+(o.code?'Code already received':'Request refund')+'">'+icon('refund')+'<span class="refund-label sr-only">Refund</span></button></td></tr>').join('');
+  if (historyChanged) animateChange($('history-body'));
   $('history-empty').hidden = rows.length>0;
   const style = getComputedStyle($('table-viewport'));
   const rowHeight = parseFloat(style.getPropertyValue('--row-height')) || 56;
@@ -81,6 +117,11 @@ function renderCurrent() {
   $('current-order').hidden = !current || buying;
   $('new-order').hidden = !current;
   $('circle').classList.toggle('has-code',Boolean(current?.code));
+  const signature = current ? current.id+':'+current.code : 'logo';
+  if (signature !== circleSignature) {
+    circleSignature = signature;
+    animateChange(current ? $('current-order') : $('buy'));
+  }
   if (!current) return;
 
   $('current-phone').textContent = current.phone;
@@ -152,7 +193,7 @@ async function connectAccount(newKey, newPrefs, restore = false) {
   await syncBalance(token); if (token !== epoch) return;
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serverManaged ? 'server-managed-account' : key)); if (token !== epoch) return;
   account = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2,'0')).join('').slice(0,24);
-  const cached = storage.get('smsdesk.history.' + account); orders = new Map((Array.isArray(cached) ? cached : []).map(o => [o.id,o]));
+  const cached = storage.get('smsdesk.history.' + account); orders = new Map((Array.isArray(cached) ? cached : []).map(o => [o.id,{...o,phone:phoneNumber(o)}]));
   connected = true; storage.set('smsdesk.preferences',prefs); if (!serverManaged) storage.set('smsdesk.session',{key},true); setConnection('SMSPool connected','connected'); render();
   if ($('settings-dialog').open) $('settings-dialog').close(); if (!restore) notify('Account connected');
   enableAudio();
@@ -174,8 +215,11 @@ $('settings').onclick = openSettings; $('close-settings').onclick = () => $('set
 $('disconnect').onclick = () => { resetSession(); $('api-key').value = ''; $('settings-dialog').close(); render(); notify('Disconnected. Your account history is saved.'); };
 $('refresh').onclick = () => { if (demo) { notify('Demo data is up to date'); return; } if (!connected) openSettings(); else void refresh(true); };
 $('buy').onclick = async () => {
-  if (buying || uncertain) return;
+  if (buying || uncertain || confirmResolver) return;
   if (!connected && !demo) { openSettings(); return; }
+  const confirmationEpoch = epoch;
+  const accepted = await confirmAction({title:'Confirm purchase',message:demo ? 'Add a demo number? No money will be charged.' : 'Buy one Israel Coca-Cola number?',detail:price != null ? 'Estimated price · '+money(price)+(prefs.maxPrice ? ' · Limit '+money(prefs.maxPrice) : '') : prefs.maxPrice ? 'Price limit · '+money(prefs.maxPrice) : 'Current SMSPool price applies.',action:demo ? 'Add demo number' : 'Buy number'});
+  if (!accepted || confirmationEpoch !== epoch || buying || uncertain) return;
   enableAudio(); if (demo) { buyDemo(); return; }
   buying = true; render(); const token = epoch;
   try {
@@ -189,7 +233,11 @@ $('buy').onclick = async () => {
   finally { if (token === epoch) { buying = false; render(); schedulePoll(); } }
 };
 async function refund(id) {
-  const order=orders.get(id); if(!canRefund(order)||refundBusy.has(id))return;
+  const order=orders.get(id); if(!canRefund(order)||refundBusy.has(id)||confirmResolver)return;
+  const confirmationEpoch=epoch;
+  const accepted=await confirmAction({title:'Confirm refund',message:'Cancel this number and request a refund?',detail:order.phone+(order.cost != null ? ' · '+money(order.cost) : ''),action:'Request refund'});
+  if(!accepted||confirmationEpoch!==epoch)return;
+  if(!canRefund(orders.get(id))||refundBusy.has(id)){notify('This number is no longer eligible for a refund.',true);return;}
   const token=epoch;refundBusy.add(id);render();
   try {
     if(!demo){const result=await api('/sms/cancel',{orderid:id});if(String(result.success)!=='1')throw new Error('SMSPool did not confirm the refund.');}
@@ -215,11 +263,11 @@ $('export').onclick = () => {
 function loadDemo() {
   resetSession(); demo = true; prefs.sound ??= true; enableAudio(); document.body.classList.add('demo-mode'); balance = 24.63; price = .37; setConnection('Demo · no charges');
   const now = Date.now();
-  for (let i = 0; i < 18; i++) { const id = 'DEMO'+String(18-i).padStart(3,'0'), status = i === 0 || i === 3 ? 'pending' : i === 5 || i === 9 ? 'expired' : 'completed'; orders.set(id,{id,phone:'+97253'+String(2411034+i*137).padStart(7,'0'),code:status === 'completed' ? ['715017','093246','382149','820614'][i%4] : '',status,cost:.37,fullMessage:status === 'completed' ? 'Coca-Cola: your verification code '+['715017','093246','382149','820614'][i%4] : '',expires:now/1000+987-i*10,created:now-i*360000}); }
+  for (let i = 0; i < 18; i++) { const id = 'DEMO'+String(18-i).padStart(3,'0'), status = i === 0 || i === 3 ? 'pending' : i === 5 || i === 9 ? 'expired' : 'completed'; orders.set(id,{id,phone:'053'+String(2411034+i*137).padStart(7,'0'),code:status === 'completed' ? ['715017','093246','382149','820614'][i%4] : '',status,cost:.37,fullMessage:status === 'completed' ? 'Coca-Cola: your verification code '+['715017','093246','382149','820614'][i%4] : '',expires:now/1000+987-i*10,created:now-i*360000}); }
   selected = '';   render();
   const token = epoch; setTimeout(() => { if (demo && token === epoch && WAITING.has(orders.get('DEMO018')?.status)) { merge({order_id:'DEMO018',status:3,sms:'715017',full_sms:'Coca-Cola: your verification code 715017'},true); render(); } },6000);
 }
-function buyDemo() { const id = 'DEMO'+Date.now(), token = epoch; orders.set(id,{id,phone:'+972539000123',code:'',status:'pending',cost:.37,expires:Date.now()/1000+1200,created:Date.now(),fullMessage:''}); selected = id; activeOrderId = id; balance = Math.round((balance-.37)*100)/100; page = 1; render(); notify('Demo number added. Your code will arrive in 6 seconds.'); setTimeout(() => { if (demo && token === epoch && WAITING.has(orders.get(id)?.status)) { merge({order_id:id,status:3,sms:'008421',full_sms:'Coca-Cola: your verification code 008421'},true); render(); } },6000); }
+function buyDemo() { const id = 'DEMO'+Date.now(), token = epoch; orders.set(id,{id,phone:'0539000123',code:'',status:'pending',cost:.37,expires:Date.now()/1000+1200,created:Date.now(),fullMessage:''}); selected = id; activeOrderId = id; balance = Math.round((balance-.37)*100)/100; page = 1; render(); notify('Demo number added. Your code will arrive in 6 seconds.'); setTimeout(() => { if (demo && token === epoch && WAITING.has(orders.get(id)?.status)) { merge({order_id:id,status:3,sms:'008421',full_sms:'Coca-Cola: your verification code 008421'},true); render(); } },6000); }
 $('demo').onclick = () => { if (buying) return; $('settings-dialog').close(); if (demo) { resetSession(); render(); } else { enableAudio(); loadDemo(); } };
 new ResizeObserver(fitRows).observe(document.querySelector('main')); setInterval(updateCountdown,1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && connected && !demo) void refresh(); });

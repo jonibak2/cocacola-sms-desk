@@ -4,16 +4,16 @@ import {parseOrderTimestamp,sortOrders,circleOrder,orderSummary,refundAvailable,
 
 test('leading zero SMS codes survive all response formats and refreshes',() => {
   const first = normalize({order_id:'ORDER',phonenumber:'0532411034',status:'pending',code:'0',cost:'.37'});
-  assert.equal(first.code,''); assert.equal(first.phone,'+972532411034');
+  assert.equal(first.code,''); assert.equal(first.phone,'0532411034');
   const completed = normalize({order_id:'ORDER',status:3,sms:'008421'},first);
   assert.equal(completed.code,'008421'); assert.equal(completed.status,'completed'); assert.equal(completed.cost,.37);
   const stale = normalize({order_code:'ORDER',status:'pending',code:'0'},completed);
   assert.equal(stale.code,'008421'); assert.equal(stale.status,'completed');
   assert.equal(normalize({status:3,sms:'000000'}).code,'000000');
 });
-test('Israeli phone normalization does not duplicate country code',() => {
-  for (const phone of ['+972 532411034','972532411034','00972532411034','0532411034','532411034']) assert.equal(phoneNumber({phonenumber:phone}),'+972532411034');
-  assert.equal(phoneNumber({cc:'972',phonenumber:'532411034'}),'+972532411034');
+test('Israeli phone normalization always uses local format for display and copying',() => {
+  for (const phone of ['+972 532411034','972532411034','00972532411034','0532411034','532411034']) assert.equal(phoneNumber({phonenumber:phone}),'0532411034');
+  assert.equal(phoneNumber({cc:'972',phonenumber:'532411034'}),'0532411034');
   assert.equal(phoneNumber({}), '');
 });
 test('history includes only CocaCola Israel orders',() => {

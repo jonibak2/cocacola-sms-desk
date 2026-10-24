@@ -5,7 +5,7 @@ import { handleProxy } from './proxy.mjs';
 
 const port = Number(process.env.PORT || 4173);
 const origin = `http://127.0.0.1:${port}`;
-const files = new Map([['/','index.html'],['/index.html','index.html'],['/app.js','app.js'],['/model.js','model.js'],['/styles.css','styles.css'],['/apple-touch-icon.png','apple-touch-icon.png']]);
+const files = new Map([['/','index.html'],['/index.html','index.html'],['/app.js','app.js'],['/model.js','model.js'],['/theme.js','theme.js'],['/styles.css','styles.css'],['/apple-touch-icon.png','apple-touch-icon.png']]);
 const types = {html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',png:'image/png'};
 const server = createServer(async(req,res) => {
   const url = new URL(req.url,origin);

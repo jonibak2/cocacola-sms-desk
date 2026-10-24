@@ -10,8 +10,8 @@ export function isRelevant(row) {
 export function phoneNumber(row) {
   let digits = String(row.number || row.phonenumber || row.phone || '').replace(/\D/g, '');
   if (digits.startsWith('00972')) digits = digits.slice(2);
-  if (!digits.startsWith('972') && digits) digits = '972' + digits.replace(/^0/, '');
-  return digits ? '+' + digits : '';
+  if (digits.startsWith('972')) digits = digits.slice(3);
+  return digits ? '0' + digits.replace(/^0+/, '') : '';
 }
 export function normalize(row, previous = {}) {
   const status = statuses[row.status] || String(row.status || previous.status || 'pending').toLowerCase();
@@ -21,7 +21,7 @@ export function normalize(row, previous = {}) {
   const purchasedAt = Number.isFinite(row.purchasedAt) ? row.purchasedAt : previous.purchasedAt;
   return {
     id: String(row.order_id || row.order_code || previous.id || ''),
-    phone: phoneNumber(row) || previous.phone || '',
+    phone: phoneNumber(row) || phoneNumber(previous),
     code,
     fullMessage: String(row.full_sms || row.full_code || previous.fullMessage || ''),
     status: previous.status && !WAITING.has(previous.status) && WAITING.has(status) ? previous.status : status,
