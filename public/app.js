@@ -1,4 +1,4 @@
-import { SERVICE, COUNTRY, WAITING, circleOrder, orderSummary, refundAvailable, statusLabels, isRelevant, normalize, rowsFrom, csvCell } from './model.js';
+import { SERVICE, COUNTRY, WAITING, sortOrders, circleOrder, orderSummary, refundAvailable, statusLabels, isRelevant, normalize, rowsFrom, csvCell } from './model.js';
 
 const iconNames = {wallet:'wallet',can:'cylinder',average:'coins',spent:'receipt',hash:'hash',phone:'phone',key:'key',pending:'clock',completed:'check-circle',expired:'hourglass',cancelled:'prohibit',refunded:'arrow-counter-clockwise',activating:'spinner-gap',processing:'spinner-gap',resend:'arrows-clockwise',refresh:'arrow-clockwise',settings:'gear-six',copy:'copy',plus:'plus',refund:'arrow-counter-clockwise',close:'x',download:'download-simple',arrow:'caret-right',chevron:'caret-right','chevron-left':'caret-left',play:'play'};
 const icon = name => '<img class="icon" src="./assets/icons/'+(iconNames[name] || 'plus')+'.svg" alt="" aria-hidden="true">';
@@ -42,7 +42,7 @@ function merge(row, announce = false) {
   orders.set(id, next);
   if (announce && id === activeOrderId && next.code && !previous?.code) { notify(`SMS received: ${next.code}`); beep(); }
 }
-const sorted = () => [...orders.values()].sort((a,b) => b.created - a.created || b.id.localeCompare(a.id));
+const sorted = () => sortOrders(orders.values());
 function filtered() { return sorted(); }
 const badge = order => '<span class="status '+escape(order.status)+'" title="'+escape(statusLabels[order.status] || order.status)+'" aria-label="'+escape(statusLabels[order.status] || order.status)+'">'+icon(order.status)+'</span>';
 function render() {
@@ -71,7 +71,7 @@ function render() {
   updateCountdown();
 }
 function canRefund(order) { return refundAvailable(order); }
-function refundSeconds(order) { return Math.max(0, Math.ceil((order.created + 60000 - Date.now()) / 1000)); }
+function refundSeconds(order) { return Math.max(0, Math.ceil(((order.purchasedAt ?? order.created) + 60000 - Date.now()) / 1000)); }
 function renderCurrent() {
   const current = circleOrder(orders, activeOrderId);
   if (!current) activeOrderId = '';
@@ -181,7 +181,7 @@ $('buy').onclick = async () => {
     const result = await api('/purchase/sms',parameters,{purchase:true});
     if (token !== epoch) return;
     if (!result.order_id || !(result.number || result.phonenumber)) { const error = new Error('The purchase may have succeeded, but the response is incomplete. Refresh your order history.'); error.uncertain = true; throw error; }
-    merge({...result,status:'pending'}); selected = String(result.order_id); activeOrderId = selected; page = 1; filter = 'all';  setFilter('all'); persist(); render(); notify('Number purchased. Waiting for SMS.');
+    merge({...result,status:'pending',purchasedAt:Date.now()}); selected = String(result.order_id); activeOrderId = selected; page = 1; filter = 'all';  setFilter('all'); persist(); render(); notify('Number purchased. Waiting for SMS.');
     await syncBalance(token).catch(() => {});
   } catch(error) { if (token === epoch) { uncertain = Boolean(error.uncertain); notify(error.message,true); } }
   finally { if (token === epoch) { buying = false; render(); schedulePoll(); } }
@@ -206,7 +206,7 @@ function setFilter(value) { filter = value; page = 1; document.querySelectorAll(
 document.querySelectorAll('[data-filter]').forEach(button => { button.onclick = () => setFilter(button.dataset.filter); });
 $('prev').onclick = () => { page--; render(); }; $('next').onclick = () => { page++; render(); };
 $('export').onclick = () => {
-  const rows = [['Order ID','Phone','Code','Service','Country','Status','Cost USD','Created UTC','Message'],...sorted().map(o => [o.id,o.phone,o.code,'CocaCola','IL',o.status,o.cost,new Date(o.created).toISOString(),o.fullMessage])];
+  const rows = [['Order ID','Phone','Code','Service','Country','Status','Cost USD','Created UTC','Message'],...sorted().map(o => [o.id,o.phone,o.code,'CocaCola','IL',o.status,o.cost,o.created ? new Date(o.created).toISOString() : '',o.fullMessage])];
   const url = URL.createObjectURL(new Blob(['\ufeff'+rows.map(row => row.map(csvCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}));
   const a = document.createElement('a'); a.href = url; a.download = `cocacola-sms-${demo ? 'demo-' : ''}${new Date().toISOString().slice(0,10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000);
 };

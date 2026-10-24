@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {circleOrder,orderSummary,refundAvailable,normalize,phoneNumber,isRelevant,rowsFrom,csvCell} from '../public/model.js';
+import {parseOrderTimestamp,sortOrders,circleOrder,orderSummary,refundAvailable,normalize,phoneNumber,isRelevant,rowsFrom,csvCell} from '../public/model.js';
 
 test('leading zero SMS codes survive all response formats and refreshes',() => {
   const first = normalize({order_id:'ORDER',phonenumber:'0532411034',status:'pending',code:'0',cost:'.37'});
@@ -64,4 +64,24 @@ test('circle restores logo when the session order is refunded, cancelled or expi
  for(const status of ['pending','processing','activating','resend','completed']){const order={id:'current',status};orders.set('current',order);assert.equal(circleOrder(orders,'current'),order);}
  for(const status of ['refunded','cancelled','expired']){orders.set('current',{id:'current',status});assert.equal(circleOrder(orders,'current'),null);}
  assert.equal(circleOrder(orders,''),null);assert.equal(circleOrder(orders,'missing'),null);
+});
+
+test('server purchase dates repair cached ordering regardless of completed or refunded status',() => {
+ const old=normalize({order_code:'OLD',timestamp:'2026-10-23 18:00:00',status:'completed',code:'123456'},{created:Date.parse('2026-10-24T10:00:00Z')});
+ const newest=normalize({order_code:'NEW',timestamp:'2026-10-23 20:00:00',status:'refunded'},{created:Date.parse('2026-10-23T17:00:00Z')});
+ const middle=normalize({order_code:'MIDDLE',timestamp:'2026-10-23 19:00:00',status:'refunded'});
+ assert.deepEqual(sortOrders([old,newest,middle]).map(o=>o.id),['NEW','MIDDLE','OLD']);
+ assert.equal(old.created,Date.parse('2026-10-23T18:00:00Z'));
+ const update=normalize({order_code:'OLD',status:3,sms:'123456'},old);assert.equal(update.created,old.created);
+});
+test('order timestamps accept SQL, ISO, epoch seconds and milliseconds consistently',()=>{
+ const ms=Date.parse('2026-10-23T20:00:00Z');
+ for(const value of ['2026-10-23 20:00:00','2026-10-23T20:00:00Z','2026-10-23T23:00:00+03:00',ms,ms/1000,String(ms/1000)]) assert.equal(parseOrderTimestamp(value),ms);
+ assert.equal(Number.isNaN(parseOrderTimestamp('invalid')),true);
+ assert.equal(normalize({order_id:'UNKNOWN'}).created,0);
+});
+test('server date correction does not change the locally measured refund delay',()=>{
+ const now=Date.now();const first=normalize({order_id:'NEW',purchasedAt:now,status:'pending'});
+ const synced=normalize({order_code:'NEW',timestamp:'2026-10-23 10:00:00',status:'pending'},first);
+ assert.equal(synced.purchasedAt,now);assert.equal(refundAvailable(synced,now+59999),false);assert.equal(refundAvailable(synced,now+60000),true);
 });

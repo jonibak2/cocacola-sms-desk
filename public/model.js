@@ -17,7 +17,8 @@ export function normalize(row, previous = {}) {
   const status = statuses[row.status] || String(row.status || previous.status || 'pending').toLowerCase();
   const rawCode = row.sms ?? row.code;
   const code = rawCode == null || rawCode === '' || (String(rawCode) === '0' && status !== 'completed') ? previous.code || '' : String(rawCode);
-  const timestamp = row.timestamp ? Date.parse(String(row.timestamp).replace(' ', 'T') + (/Z$|[+-]\d\d:\d\d$/.test(String(row.timestamp)) ? '' : 'Z')) : NaN;
+  const timestamp = parseOrderTimestamp(row.timestamp);
+  const purchasedAt = Number.isFinite(row.purchasedAt) ? row.purchasedAt : previous.purchasedAt;
   return {
     id: String(row.order_id || row.order_code || previous.id || ''),
     phone: phoneNumber(row) || previous.phone || '',
@@ -26,7 +27,8 @@ export function normalize(row, previous = {}) {
     status: previous.status && !WAITING.has(previous.status) && WAITING.has(status) ? previous.status : status,
     cost: row.cost != null && row.cost !== '' ? Number(row.cost) : row.cost_in_cents != null ? Number(row.cost_in_cents) / 100 : previous.cost ?? null,
     expires: Number(row.expiration || row.expiry || previous.expires || (row.expires_in ? Date.now() / 1000 + Number(row.expires_in) : 0)),
-    created: previous.created || (Number.isFinite(timestamp) ? timestamp : Date.now()),
+    created: Number.isFinite(timestamp) ? timestamp : previous.created || purchasedAt || 0,
+    purchasedAt,
   };
 }
 export function rowsFrom(data) {
@@ -42,7 +44,7 @@ export function csvCell(value) {
 }
 
 export function refundAvailable(order, now = Date.now()) {
-  return Boolean(order && !order.code && WAITING.has(order.status) && Number.isFinite(order.created) && now >= order.created + 60000);
+  return Boolean(order && !order.code && WAITING.has(order.status) && Number.isFinite(order.purchasedAt ?? order.created) && (order.purchasedAt ?? order.created) > 0 && now >= (order.purchasedAt ?? order.created) + 60000);
 }
 
 export function orderSummary(orders, balance, currentPrice = null) {
@@ -57,4 +59,17 @@ export function orderSummary(orders, balance, currentPrice = null) {
 export function circleOrder(orders, id) {
   const order = orders.get(id);
   return order && (WAITING.has(order.status) || order.status === 'completed') ? order : null;
+}
+
+export function parseOrderTimestamp(value) {
+  if (value == null || value === '') return NaN;
+  if (typeof value === 'number' || /^\d{10,13}$/.test(String(value))) {
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? number < 1e12 ? number * 1000 : number : NaN;
+  }
+  const text = String(value).trim().replace(' ', 'T');
+  return Date.parse(text + (/Z$|[+-]\d{2}:?\d{2}$/.test(text) ? '' : 'Z'));
+}
+export function sortOrders(orders) {
+  return [...orders].sort((a,b) => b.created - a.created || (b.purchasedAt || 0) - (a.purchasedAt || 0) || b.id.localeCompare(a.id));
 }
