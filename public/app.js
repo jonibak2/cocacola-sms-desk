@@ -33,7 +33,7 @@ async function api(endpoint, parameters = {}, options = {}) {
   try { data = await response.json(); } catch { const error = new Error('Invalid proxy response. Check your connection and order history.'); error.uncertain = Boolean(options.purchase); throw error; }
   if (!response.ok || String(data?.success) === '0') {
     const messages = { OUT_OF_STOCK:'No Israel numbers available for Coca-Cola. Try again later.', BALANCE_ERROR:'Insufficient SMSPool balance.', PRICE_NOT_FOUND:'No numbers available within your price limit.' };
-    const error = new Error(response.status === 401 || response.status === 403 ? serverManaged ? 'Sign in through Cloudflare Access to use this account.' : 'Invalid API key or access denied. Check your key and Worker settings.' : response.status === 429 ? 'SMSPool rate limit reached. Please wait.' : messages[data?.type] || String(data?.errors?.[0]?.message || data?.message || `API error (${response.status})`).replace(/<[^>]*>/g,''));
+    const error = new Error(response.status === 401 || response.status === 403 ? serverManaged ? 'Check the SMSPOOL_API_KEY secret and ALLOWED_ORIGIN in Cloudflare.' : 'Invalid API key or access denied. Check your key and Worker settings.' : response.status === 429 ? 'SMSPool rate limit reached. Please wait.' : messages[data?.type] || String(data?.errors?.[0]?.message || data?.message || `API error (${response.status})`).replace(/<[^>]*>/g,''));
     error.uncertain = Boolean(options.purchase && response.status >= 500); error.rateLimited = response.status === 429; throw error;
   }
   return data;
@@ -171,7 +171,7 @@ $('settings-form').addEventListener('submit', async event => {
   finally { $('connect').disabled = false; }
 });
 $('settings').onclick = openSettings; $('close-settings').onclick = () => $('settings-dialog').close();
-$('disconnect').onclick = () => { if (serverManaged) { resetSession(); location.assign('/cdn-cgi/access/logout'); return; } resetSession(); try { sessionStorage.removeItem('smsdesk.session'); } catch {} $('api-key').value = ''; $('settings-dialog').close(); render(); notify('Disconnected. Your account history is saved.'); };
+$('disconnect').onclick = () => { resetSession(); $('api-key').value = ''; $('settings-dialog').close(); render(); notify('Disconnected. Your account history is saved.'); };
 $('refresh').onclick = () => { if (demo) { notify('Demo data is up to date'); return; } if (!connected) openSettings(); else void refresh(true); };
 $('buy').onclick = async () => {
   if (buying || uncertain) return;
@@ -225,9 +225,10 @@ new ResizeObserver(fitRows).observe(document.querySelector('main')); setInterval
 document.addEventListener('visibilitychange', () => { if (!document.hidden && connected && !demo) void refresh(); });
 render();
 async function initializeAccount() {
-  if (isWorkerApp) {
+  const base = proxyBase();
+  if (base && !isLocal) {
     try {
-      const configResponse = await fetch('/api/config',{credentials:'same-origin',cache:'no-store'});
+      const configResponse = await fetch(base.replace(/\/api\/?$/,'')+'/api/config',{credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(15000)});
       if (!configResponse.ok) throw new Error('Could not read server configuration.');
       const config = await configResponse.json();
       serverManaged = config.serverManaged === true;
@@ -235,12 +236,10 @@ async function initializeAccount() {
         try { sessionStorage.removeItem('smsdesk.session'); } catch {}
         $('api-key').value = ''; $('api-key').required = false;
         $('api-key').closest('label').hidden = true;
-        const sessionResponse = await fetch('/api/session',{credentials:'same-origin',cache:'no-store'});
-        if (!sessionResponse.ok) throw new Error('Sign in through Cloudflare Access. Your server secret stays locked until Access is configured.');
-        await connectAccount('',{...prefs,proxy:location.origin+'/api'},true);
+        await connectAccount('',prefs,true);
         return;
       }
-    } catch(error) { setConnection('Access required','error'); notify(error.message,true); return; }
+    } catch(error) { setConnection('Connection failed','error'); notify(error.message,true); return; }
   }
   const session = storage.get('smsdesk.session',true);
   if (session?.key) await connectAccount(session.key,prefs,true);
