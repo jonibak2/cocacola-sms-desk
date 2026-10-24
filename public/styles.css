@@ -42,3 +42,14 @@ body{background:#fff;overflow-x:hidden}.topbar{border-color:#17171718}.circle,.c
 .circle{--circle-size:clamp(290px,36vh,390px);width:var(--circle-size);height:var(--circle-size);flex-shrink:0}
 .stage{min-height:calc(clamp(290px,36vh,390px) + 64px)}
 @media(max-width:650px){.circle{--circle-size:min(74vw,300px,36dvh)}.stage{min-height:calc(min(74vw,300px,36dvh) + 58px)}}
+
+/* Hebrew layout; isolate phone numbers, codes and prices from RTL text. */
+html{direction:rtl}
+table{text-align:start}
+.top-actions{left:auto;right:auto;inset-inline-end:0}
+.account-stat>strong,.circle-totals strong,.circle-phone,.circle-code,.table-copy,.cost,.order-id,.countdown,#page-info{direction:ltr;unicode-bidi:isolate}
+.field input[dir="ltr"]{text-align:left}
+#api-key::placeholder{direction:rtl;text-align:right}
+.toast,.form-error{line-height:1.5;text-align:start}
+.toast{unicode-bidi:plaintext}
+@media(max-width:650px){.top-actions{inset-inline-end:-2px}}

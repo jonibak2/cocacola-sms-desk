@@ -2,7 +2,7 @@ export const SERVICE = '1244';
 export const COUNTRY = 'IL';
 export const WAITING = new Set(['pending', 'activating', 'processing', 'resend']);
 const statuses = { 1: 'pending', 2: 'expired', 3: 'completed', 4: 'resend', 5: 'cancelled', 6: 'refunded', 7: 'processing', 8: 'activating' };
-export const statusLabels = { pending: 'Waiting for SMS', activating: 'Activating', processing: 'Processing', resend: 'Resend requested', expired: 'Expired', completed: 'Code received', cancelled: 'Cancelled', refunded: 'Refunded' };
+export const statusLabels = { pending: 'בהמתנה למסרון', activating: 'בהפעלה', processing: 'בעיבוד', resend: 'התבקשה שליחה חוזרת', expired: 'פג תוקף', completed: 'הקוד התקבל', cancelled: 'בוטל', refunded: 'הכסף הוחזר' };
 export const canonical = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 export function isRelevant(row) {
   return ['cocacola', SERVICE].includes(canonical(row.service ?? row.service_id)) && ['il', 'israel', '29'].includes(String(row.short_name ?? row.country ?? row.country_id).toLowerCase());
@@ -35,7 +35,7 @@ export function rowsFrom(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.data)) return data.data;
   if (data && typeof data === 'object' && Object.keys(data).every(key => /^\d+$/.test(key))) return Object.values(data);
-  throw new Error('SMSPool returned an unexpected order list format.');
+  throw new Error('רשימת ההזמנות שהתקבלה מ-SMSPool אינה תקינה.');
 }
 export function csvCell(value) {
   let text = String(value ?? '');
