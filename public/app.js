@@ -13,9 +13,11 @@ const refundBusy = new Set();
 let key = '', account = '', connected = false, demo = false, buying = false, uncertain = false, syncing = false, epoch = 0;
 let orders = new Map(), selected = '', filter = 'all', page = 1, pageSize = 4, balance = null, price = null, pollTimer, toastTimer, lastHistory = 0, lastBalance = 0, checkOffset = 0, pollDelay = 3000;
 let audio;
+let serverManaged = false;
+const isWorkerApp = location.hostname === 'cocacola-sms-proxy.jonibak2006.workers.dev';
 let activeOrderId = ''; // Only a purchase made on this page may occupy the circle.
 const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
-function proxyBase() { return prefs.proxy || (isLocal ? location.origin + '/api' : ''); }
+function proxyBase() { return isWorkerApp ? location.origin + '/api' : prefs.proxy || (isLocal ? location.origin + '/api' : ''); }
 function notify(message, error = false) { $('toast').textContent = message; $('toast').classList.toggle('error', error); $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, error ? 9000 : 3000); }
 function setConnection(text, state = '') { $('connection').className = 'connection ' + state; $('connection').lastElementChild.textContent = text;  }
 function persist() { if (!demo && account && !storage.set('smsdesk.history.' + account, [...orders.values()])) notify('Browser storage is full. Export your history as CSV.', true); }
@@ -25,13 +27,13 @@ async function api(endpoint, parameters = {}, options = {}) {
   const base = proxyBase();
   if (!base) throw new Error('Enter the API proxy URL in Settings.');
   let response;
-  try { response = await fetch(base + endpoint, { method:'POST', body:new URLSearchParams({ key, ...parameters }), credentials:'omit', referrerPolicy:'no-referrer', signal:AbortSignal.timeout(options.purchase ? 45000 : 20000) }); }
+  try { response = await fetch(base + endpoint, { method:'POST', body:new URLSearchParams({ ...(serverManaged ? {} : {key}), ...parameters }), credentials:isWorkerApp ? 'same-origin' : 'omit', referrerPolicy:'no-referrer', signal:AbortSignal.timeout(options.purchase ? 45000 : 20000) }); }
   catch { const error = new Error(options.purchase ? 'Purchase response lost. The number may have been purchased. Refresh your orders before buying again.' : 'Cannot reach the API proxy. Check its URL, your connection and the Worker ALLOWED_ORIGIN.'); error.uncertain = Boolean(options.purchase); throw error; }
   let data;
   try { data = await response.json(); } catch { const error = new Error('Invalid proxy response. Check your connection and order history.'); error.uncertain = Boolean(options.purchase); throw error; }
   if (!response.ok || String(data?.success) === '0') {
     const messages = { OUT_OF_STOCK:'No Israel numbers available for Coca-Cola. Try again later.', BALANCE_ERROR:'Insufficient SMSPool balance.', PRICE_NOT_FOUND:'No numbers available within your price limit.' };
-    const error = new Error(response.status === 401 || response.status === 403 ? 'Invalid API key or access denied. Check your key and Worker settings.' : response.status === 429 ? 'SMSPool rate limit reached. Please wait.' : messages[data?.type] || String(data?.errors?.[0]?.message || data?.message || `API error (${response.status})`).replace(/<[^>]*>/g,''));
+    const error = new Error(response.status === 401 || response.status === 403 ? serverManaged ? 'Sign in through Cloudflare Access to use this account.' : 'Invalid API key or access denied. Check your key and Worker settings.' : response.status === 429 ? 'SMSPool rate limit reached. Please wait.' : messages[data?.type] || String(data?.errors?.[0]?.message || data?.message || `API error (${response.status})`).replace(/<[^>]*>/g,''));
     error.uncertain = Boolean(options.purchase && response.status >= 500); error.rateLimited = response.status === 429; throw error;
   }
   return data;
@@ -144,14 +146,14 @@ async function refresh(manual = false) {
 }
 function schedulePoll(delay = 3000) { clearTimeout(pollTimer); if (connected && !demo) pollTimer = setTimeout(() => { void refresh(); }, delay); }
 function resetSession() { epoch++; clearTimeout(pollTimer); connected = false; demo = false; syncing = false; buying = false; uncertain = false; key = ''; account = ''; orders = new Map(); selected = ''; activeOrderId = ''; balance = null; price = null; lastHistory = 0; lastBalance = 0; pollDelay = 3000; page = 1; filter = 'all';  document.querySelectorAll('[data-filter]').forEach(button => button.classList.toggle('active',button.dataset.filter === 'all')); try { sessionStorage.removeItem('smsdesk.session'); } catch {} document.body.classList.remove('demo-mode'); $('refresh').classList.remove('spinning'); setConnection('Disconnected');   render(); }
-function openSettings() { $('api-key').value = key; $('proxy-url').value = prefs.proxy || ''; $('max-price').value = prefs.maxPrice || ''; $('sound').checked = prefs.sound !== false; $('settings-error').textContent = ''; $('disconnect').disabled = !connected && !demo; $('settings-dialog').showModal(); }
+function openSettings() { $('api-key').value = key; $('proxy-url').value = proxyBase(); $('api-key').closest('label').hidden = serverManaged; $('api-key').required = !serverManaged; $('proxy-url').closest('label').hidden = isWorkerApp; $('max-price').value = prefs.maxPrice || ''; $('sound').checked = prefs.sound !== false; $('settings-error').textContent = ''; $('disconnect').disabled = !connected && !demo; $('settings-dialog').showModal(); }
 async function connectAccount(newKey, newPrefs, restore = false) {
   resetSession(); key = newKey; prefs = newPrefs; const token = epoch;
   await syncBalance(token); if (token !== epoch) return;
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key)); if (token !== epoch) return;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serverManaged ? 'server-managed-account' : key)); if (token !== epoch) return;
   account = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2,'0')).join('').slice(0,24);
   const cached = storage.get('smsdesk.history.' + account); orders = new Map((Array.isArray(cached) ? cached : []).map(o => [o.id,o]));
-  connected = true; storage.set('smsdesk.preferences',prefs); storage.set('smsdesk.session',{key},true); setConnection('SMSPool connected','connected'); render();
+  connected = true; storage.set('smsdesk.preferences',prefs); if (!serverManaged) storage.set('smsdesk.session',{key},true); setConnection('SMSPool connected','connected'); render();
   if ($('settings-dialog').open) $('settings-dialog').close(); if (!restore) notify('Account connected');
   enableAudio();
   try { await syncHistory(token,true); await syncPrice(token); } catch(error) { if (token === epoch) notify(error.message,true); }
@@ -160,16 +162,16 @@ async function connectAccount(newKey, newPrefs, restore = false) {
 $('settings-form').addEventListener('submit', async event => {
   event.preventDefault(); $('settings-error').textContent = ''; $('connect').disabled = true;
   try {
-    let proxy = $('proxy-url').value.trim().replace(/\/$/,'');
+    let proxy = isWorkerApp ? location.origin+'/api' : $('proxy-url').value.trim().replace(/\/$/,'');
     if (proxy) { const url = new URL(proxy); if (url.username || url.password || url.search || url.hash || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost','127.0.0.1'].includes(url.hostname)))) throw new Error('Use your Worker HTTPS URL without query parameters.'); }
     if (!proxy && !isLocal) throw new Error('An HTTPS API proxy URL is required.');
     const maxPrice = $('max-price').value ? Number($('max-price').value) : null;
-    await connectAccount($('api-key').value.trim(),{proxy,maxPrice,sound:$('sound').checked});
+    await connectAccount(serverManaged ? '' : $('api-key').value.trim(),{proxy,maxPrice,sound:$('sound').checked});
   } catch(error) { $('settings-error').textContent = error.message; setConnection('Connection failed','error'); }
   finally { $('connect').disabled = false; }
 });
 $('settings').onclick = openSettings; $('close-settings').onclick = () => $('settings-dialog').close();
-$('disconnect').onclick = () => { resetSession(); try { sessionStorage.removeItem('smsdesk.session'); } catch {} $('api-key').value = ''; $('settings-dialog').close(); render(); notify('Disconnected. Your account history is saved.'); };
+$('disconnect').onclick = () => { if (serverManaged) { resetSession(); location.assign('/cdn-cgi/access/logout'); return; } resetSession(); try { sessionStorage.removeItem('smsdesk.session'); } catch {} $('api-key').value = ''; $('settings-dialog').close(); render(); notify('Disconnected. Your account history is saved.'); };
 $('refresh').onclick = () => { if (demo) { notify('Demo data is up to date'); return; } if (!connected) openSettings(); else void refresh(true); };
 $('buy').onclick = async () => {
   if (buying || uncertain) return;
@@ -222,5 +224,25 @@ $('demo').onclick = () => { if (buying) return; $('settings-dialog').close(); if
 new ResizeObserver(fitRows).observe(document.querySelector('main')); setInterval(updateCountdown,1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && connected && !demo) void refresh(); });
 render();
-const session = storage.get('smsdesk.session',true);
-if (session?.key) connectAccount(session.key,prefs,true).catch(error => { resetSession(); render(); notify(error.message,true); });
+async function initializeAccount() {
+  if (isWorkerApp) {
+    try {
+      const configResponse = await fetch('/api/config',{credentials:'same-origin',cache:'no-store'});
+      if (!configResponse.ok) throw new Error('Could not read server configuration.');
+      const config = await configResponse.json();
+      serverManaged = config.serverManaged === true;
+      if (serverManaged) {
+        try { sessionStorage.removeItem('smsdesk.session'); } catch {}
+        $('api-key').value = ''; $('api-key').required = false;
+        $('api-key').closest('label').hidden = true;
+        const sessionResponse = await fetch('/api/session',{credentials:'same-origin',cache:'no-store'});
+        if (!sessionResponse.ok) throw new Error('Sign in through Cloudflare Access. Your server secret stays locked until Access is configured.');
+        await connectAccount('',{...prefs,proxy:location.origin+'/api'},true);
+        return;
+      }
+    } catch(error) { setConnection('Access required','error'); notify(error.message,true); return; }
+  }
+  const session = storage.get('smsdesk.session',true);
+  if (session?.key) await connectAccount(session.key,prefs,true);
+}
+initializeAccount().catch(error => { resetSession(); render(); notify(error.message,true); });
