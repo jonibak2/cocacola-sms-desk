@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {orderSummary,refundAvailable,normalize,phoneNumber,isRelevant,rowsFrom,csvCell} from '../public/model.js';
+import {circleOrder,orderSummary,refundAvailable,normalize,phoneNumber,isRelevant,rowsFrom,csvCell} from '../public/model.js';
 
 test('leading zero SMS codes survive all response formats and refreshes',() => {
   const first = normalize({order_id:'ORDER',phonenumber:'0532411034',status:'pending',code:'0',cost:'.37'});
@@ -57,4 +57,11 @@ test('purchase totals count confirmed codes and estimate buying capacity with av
   assert.equal(orderSummary([{status:'completed',code:'123456',cost:.1}],.3).affordable,3);
   const missing=orderSummary([{status:'completed',code:'123456',cost:null}],1);
   assert.equal(missing.confirmedCount,1);assert.equal(missing.totalCost,null);assert.equal(missing.averagePrice,null);assert.equal(missing.affordable,null);
+});
+
+test('circle restores logo when the session order is refunded, cancelled or expired',() => {
+ const orders=new Map();
+ for(const status of ['pending','processing','activating','resend','completed']){const order={id:'current',status};orders.set('current',order);assert.equal(circleOrder(orders,'current'),order);}
+ for(const status of ['refunded','cancelled','expired']){orders.set('current',{id:'current',status});assert.equal(circleOrder(orders,'current'),null);}
+ assert.equal(circleOrder(orders,''),null);assert.equal(circleOrder(orders,'missing'),null);
 });

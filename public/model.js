@@ -53,3 +53,8 @@ export function orderSummary(orders, balance, currentPrice = null) {
   const affordable = typeof balance === 'number' && Number.isFinite(balance) && averagePrice > 0 ? Math.max(0, Math.floor((Math.round(balance * 100) / (averagePrice * 100)) + 1e-9)) : null;
   return { confirmedCount:confirmed.length, totalCost:priced.length === confirmed.length ? cents / 100 : null, averagePrice, affordable };
 }
+
+export function circleOrder(orders, id) {
+  const order = orders.get(id);
+  return order && (WAITING.has(order.status) || order.status === 'completed') ? order : null;
+}

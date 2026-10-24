@@ -1,6 +1,6 @@
-import { SERVICE, COUNTRY, WAITING, orderSummary, refundAvailable, statusLabels, isRelevant, normalize, rowsFrom, csvCell } from './model.js';
+import { SERVICE, COUNTRY, WAITING, circleOrder, orderSummary, refundAvailable, statusLabels, isRelevant, normalize, rowsFrom, csvCell } from './model.js';
 
-const iconNames = {refresh:'arrow-clockwise',settings:'gear-six',copy:'copy',plus:'plus',refund:'arrow-counter-clockwise',close:'x',download:'download-simple',arrow:'caret-right',chevron:'caret-right','chevron-left':'caret-left',play:'play'};
+const iconNames = {wallet:'wallet',can:'cylinder',average:'coins',spent:'receipt',hash:'hash',phone:'phone',key:'key',pending:'clock',completed:'check-circle',expired:'hourglass',cancelled:'prohibit',refunded:'arrow-counter-clockwise',activating:'spinner-gap',processing:'spinner-gap',resend:'arrows-clockwise',refresh:'arrow-clockwise',settings:'gear-six',copy:'copy',plus:'plus',refund:'arrow-counter-clockwise',close:'x',download:'download-simple',arrow:'caret-right',chevron:'caret-right','chevron-left':'caret-left',play:'play'};
 const icon = name => '<img class="icon" src="./assets/icons/'+(iconNames[name] || 'plus')+'.svg" alt="" aria-hidden="true">';
 document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = icon(el.dataset.icon); });
 const $ = id => document.getElementById(id);
@@ -43,8 +43,8 @@ function merge(row, announce = false) {
   if (announce && id === activeOrderId && next.code && !previous?.code) { notify(`SMS received: ${next.code}`); beep(); }
 }
 const sorted = () => [...orders.values()].sort((a,b) => b.created - a.created || b.id.localeCompare(a.id));
-function filtered() { const search = $('search').value.trim().toLowerCase(); return sorted().filter(order => (filter === 'all' || (filter === 'waiting' ? WAITING.has(order.status) : order.status === 'completed')) && (!search || [order.phone, order.code, order.id].some(value => value.toLowerCase().includes(search)))); }
-const badge = order => `<span class="status ${escape(order.status)}">${escape(statusLabels[order.status] || order.status)}</span>`;
+function filtered() { return sorted(); }
+const badge = order => '<span class="status '+escape(order.status)+'" title="'+escape(statusLabels[order.status] || order.status)+'" aria-label="'+escape(statusLabels[order.status] || order.status)+'">'+icon(order.status)+'</span>';
 function render() {
   $('balance').textContent = money(balance);
   const summary = orderSummary([...orders.values()], balance, price);
@@ -52,7 +52,7 @@ function render() {
   $('confirmed-cost').textContent = money(summary.totalCost);
   $('average-price').textContent = money(summary.averagePrice);
   $('affordable-count').textContent = summary.affordable == null ? '—' : '≈ '+summary.affordable;
-  const rowNumbers = new Map(sorted().map((order,index) => [order.id,index+1]));
+  const rowNumbers = new Map(sorted().map((order,index) => [order.id,orders.size-index]));
   $('buy').disabled = buying || uncertain; $('new-order').disabled = buying || uncertain;
   $('settings').disabled = buying; $('demo').disabled = buying;
   $('circle').classList.toggle('buying',buying);
@@ -60,8 +60,12 @@ function render() {
   $('buy').title = uncertain ? 'Refresh your orders first' : 'Buy a number' + (price ? ' · '+money(price) : '');
   $('demo-indicator').hidden = !demo;
   const rows = filtered(), pages = Math.max(1,Math.ceil(rows.length/pageSize)); page = Math.min(page,pages);
-  $('history-body').innerHTML = rows.slice((page-1)*pageSize,page*pageSize).map(o => '<tr data-order="'+escape(o.id)+'" tabindex="0" class="'+(selected===o.id?'selected':'')+'" aria-label="Select order '+escape(o.id)+'"><td class="order-id" title="'+escape(o.id)+'">'+rowNumbers.get(o.id)+'</td><td><button class="table-copy phone" data-copy="'+escape(o.phone)+'" title="Copy phone number">'+escape(o.phone)+icon('copy')+'</button></td><td>'+(o.code?'<button class="table-copy code" data-copy="'+escape(o.code)+'" title="Copy code">'+escape(o.code)+icon('copy')+'</button>':'<span class="dash">—</span>')+'</td><td>'+badge(o)+'</td><td class="cost">'+money(o.cost)+'</td><td><button class="refund" data-refund="'+escape(o.id)+'" '+(!canRefund(o)||refundBusy.has(o.id)?'disabled':'')+' title="'+(o.code?'Code already received':'Request refund')+'">'+icon('refund')+'<span class="refund-label">Refund</span></button></td></tr>').join('');
+  $('history-body').innerHTML = rows.slice((page-1)*pageSize,page*pageSize).map(o => '<tr data-order="'+escape(o.id)+'" tabindex="0" class="'+(selected===o.id?'selected':'')+'" aria-label="Select order '+escape(o.id)+'"><td class="order-id" title="'+escape(o.id)+'">'+rowNumbers.get(o.id)+'</td><td><button class="table-copy phone" data-copy="'+escape(o.phone)+'" title="Copy phone number">'+escape(o.phone)+icon('copy')+'</button></td><td>'+(o.code?'<button class="table-copy code" data-copy="'+escape(o.code)+'" title="Copy code">'+escape(o.code)+icon('copy')+'</button>':'<span class="dash">—</span>')+'</td><td>'+badge(o)+'</td><td class="cost">'+money(o.cost)+'</td><td><button class="refund" data-refund="'+escape(o.id)+'" '+(!canRefund(o)||refundBusy.has(o.id)?'disabled':'')+' title="'+(o.code?'Code already received':'Request refund')+'">'+icon('refund')+'<span class="refund-label sr-only">Refund</span></button></td></tr>').join('');
   $('history-empty').hidden = rows.length>0;
+  const style = getComputedStyle($('table-viewport'));
+  const rowHeight = parseFloat(style.getPropertyValue('--row-height')) || 56;
+  const headerHeight = parseFloat(style.getPropertyValue('--header-height')) || 32;
+  $('table-viewport').style.height = (headerHeight + Math.max(1, Math.min(pageSize, rows.length-(page-1)*pageSize)) * rowHeight)+'px';
   $('page-info').textContent = page+' / '+pages; $('prev').disabled = page===1; $('next').disabled = page>=pages; $('export').disabled = !orders.size;
   renderCurrent();
   updateCountdown();
@@ -69,7 +73,8 @@ function render() {
 function canRefund(order) { return refundAvailable(order); }
 function refundSeconds(order) { return Math.max(0, Math.ceil((order.created + 60000 - Date.now()) / 1000)); }
 function renderCurrent() {
-  const current = orders.get(activeOrderId);
+  const current = circleOrder(orders, activeOrderId);
+  if (!current) activeOrderId = '';
   $('buy').hidden = Boolean(current) && !buying;
   $('current-order').hidden = !current || buying;
   $('new-order').hidden = !current;
@@ -89,6 +94,7 @@ function updateCountdown() {
     button.disabled = !canRefund(order) || refundBusy.has(order.id);
     if (!order.code && WAITING.has(order.status) && seconds) button.dataset.wait = seconds+'s'; else delete button.dataset.wait;
     button.title = order.code ? 'Code already received' : seconds && WAITING.has(order.status) ? 'Refund available in '+seconds+'s' : 'Request refund';
+    button.setAttribute('aria-label',button.title);
     button.querySelector('.refund-label').textContent = !order.code && WAITING.has(order.status) && seconds ? 'Refund · '+seconds+'s' : 'Refund';
   });
   const o = orders.get(activeOrderId); if (!o) return;
@@ -96,11 +102,12 @@ function updateCountdown() {
   $('countdown').textContent = !o.code && WAITING.has(o.status) && o.expires ? Math.floor(seconds/60).toString().padStart(2,'0')+':'+(seconds%60).toString().padStart(2,'0') : '';
 }
 function fitRows() {
-  const viewport = $('table-viewport');
-  const style = getComputedStyle(viewport);
-  const rowHeight = parseFloat(style.getPropertyValue('--row-height')) || 64;
-  const headerHeight = parseFloat(style.getPropertyValue('--header-height')) || 44;
-  const size = Math.max(1,Math.floor((viewport.clientHeight-headerHeight)/rowHeight));
+  const viewport = $('table-viewport'), style = getComputedStyle(viewport);
+  const rowHeight = parseFloat(style.getPropertyValue('--row-height')) || 56;
+  const headerHeight = parseFloat(style.getPropertyValue('--header-height')) || 32;
+  const stageMin = parseFloat(getComputedStyle(document.querySelector('.stage')).minHeight) || 240;
+  const available = document.querySelector('main').clientHeight - stageMin - document.querySelector('.history-footer').getBoundingClientRect().height;
+  const size = Math.max(1,Math.floor((available-headerHeight)/rowHeight));
   if(size!==pageSize){pageSize=size;render();}
 }
 async function copy(text) { if (!text) return; try { await navigator.clipboard.writeText(text); notify('Copied: ' + text); } catch { notify('Could not copy. Allow clipboard access in your browser.', true); } }
@@ -136,7 +143,7 @@ async function refresh(manual = false) {
   finally { if (token === epoch) { syncing = false; $('refresh').classList.remove('spinning'); schedulePoll(pollDelay); } }
 }
 function schedulePoll(delay = 3000) { clearTimeout(pollTimer); if (connected && !demo) pollTimer = setTimeout(() => { void refresh(); }, delay); }
-function resetSession() { epoch++; clearTimeout(pollTimer); connected = false; demo = false; syncing = false; buying = false; uncertain = false; key = ''; account = ''; orders = new Map(); selected = ''; activeOrderId = ''; balance = null; price = null; lastHistory = 0; lastBalance = 0; pollDelay = 3000; page = 1; filter = 'all'; $('search').value = ''; document.querySelectorAll('[data-filter]').forEach(button => button.classList.toggle('active',button.dataset.filter === 'all')); try { sessionStorage.removeItem('smsdesk.session'); } catch {} document.body.classList.remove('demo-mode'); $('refresh').classList.remove('spinning'); setConnection('Disconnected');   render(); }
+function resetSession() { epoch++; clearTimeout(pollTimer); connected = false; demo = false; syncing = false; buying = false; uncertain = false; key = ''; account = ''; orders = new Map(); selected = ''; activeOrderId = ''; balance = null; price = null; lastHistory = 0; lastBalance = 0; pollDelay = 3000; page = 1; filter = 'all';  document.querySelectorAll('[data-filter]').forEach(button => button.classList.toggle('active',button.dataset.filter === 'all')); try { sessionStorage.removeItem('smsdesk.session'); } catch {} document.body.classList.remove('demo-mode'); $('refresh').classList.remove('spinning'); setConnection('Disconnected');   render(); }
 function openSettings() { $('api-key').value = key; $('proxy-url').value = prefs.proxy || ''; $('max-price').value = prefs.maxPrice || ''; $('sound').checked = prefs.sound !== false; $('settings-error').textContent = ''; $('disconnect').disabled = !connected && !demo; $('settings-dialog').showModal(); }
 async function connectAccount(newKey, newPrefs, restore = false) {
   resetSession(); key = newKey; prefs = newPrefs; const token = epoch;
@@ -174,7 +181,7 @@ $('buy').onclick = async () => {
     const result = await api('/purchase/sms',parameters,{purchase:true});
     if (token !== epoch) return;
     if (!result.order_id || !(result.number || result.phonenumber)) { const error = new Error('The purchase may have succeeded, but the response is incomplete. Refresh your order history.'); error.uncertain = true; throw error; }
-    merge({...result,status:'pending'}); selected = String(result.order_id); activeOrderId = selected; page = 1; filter = 'all'; $('search').value = ''; setFilter('all'); persist(); render(); notify('Number purchased. Waiting for SMS.');
+    merge({...result,status:'pending'}); selected = String(result.order_id); activeOrderId = selected; page = 1; filter = 'all';  setFilter('all'); persist(); render(); notify('Number purchased. Waiting for SMS.');
     await syncBalance(token).catch(() => {});
   } catch(error) { if (token === epoch) { uncertain = Boolean(error.uncertain); notify(error.message,true); } }
   finally { if (token === epoch) { buying = false; render(); schedulePoll(); } }
@@ -197,7 +204,7 @@ $('history-body').onclick = event => { const refundButton = event.target.closest
 $('history-body').onkeydown = event => { if (event.target.matches('tr') && ['Enter',' '].includes(event.key)) { event.preventDefault(); selected = event.target.dataset.order; render(); } };
 function setFilter(value) { filter = value; page = 1; document.querySelectorAll('[data-filter]').forEach(button => button.classList.toggle('active',button.dataset.filter === value)); render(); }
 document.querySelectorAll('[data-filter]').forEach(button => { button.onclick = () => setFilter(button.dataset.filter); });
-$('search').oninput = () => { page = 1; render(); }; $('prev').onclick = () => { page--; render(); }; $('next').onclick = () => { page++; render(); };
+$('prev').onclick = () => { page--; render(); }; $('next').onclick = () => { page++; render(); };
 $('export').onclick = () => {
   const rows = [['Order ID','Phone','Code','Service','Country','Status','Cost USD','Created UTC','Message'],...sorted().map(o => [o.id,o.phone,o.code,'CocaCola','IL',o.status,o.cost,new Date(o.created).toISOString(),o.fullMessage])];
   const url = URL.createObjectURL(new Blob(['\ufeff'+rows.map(row => row.map(csvCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}));
@@ -212,7 +219,7 @@ function loadDemo() {
 }
 function buyDemo() { const id = 'DEMO'+Date.now(), token = epoch; orders.set(id,{id,phone:'+972539000123',code:'',status:'pending',cost:.37,expires:Date.now()/1000+1200,created:Date.now(),fullMessage:''}); selected = id; activeOrderId = id; balance = Math.round((balance-.37)*100)/100; page = 1; render(); notify('Demo number added. Your code will arrive in 6 seconds.'); setTimeout(() => { if (demo && token === epoch && WAITING.has(orders.get(id)?.status)) { merge({order_id:id,status:3,sms:'008421',full_sms:'Coca-Cola: your verification code 008421'},true); render(); } },6000); }
 $('demo').onclick = () => { if (buying) return; $('settings-dialog').close(); if (demo) { resetSession(); render(); } else { enableAudio(); loadDemo(); } };
-new ResizeObserver(fitRows).observe($('table-viewport')); setInterval(updateCountdown,1000);
+new ResizeObserver(fitRows).observe(document.querySelector('main')); setInterval(updateCountdown,1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && connected && !demo) void refresh(); });
 render();
 const session = storage.get('smsdesk.session',true);
