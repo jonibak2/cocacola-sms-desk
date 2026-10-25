@@ -8,9 +8,9 @@ const source=(await readFile(new URL('../public/app.js',import.meta.url),'utf8')
   .replace(/^import[^\n]+\n/,'')
   .replace('initializeAccount().catch(', 'globalThis.ready = initializeAccount().catch(');
 
-for(const hostname of ['jonibak2.github.io','cocacola-sms-proxy.jonibak2006.workers.dev']) {
+for(const hostname of ['jonibak2.github.io','cocacola-sms-proxy.jonibak2006.workers.dev','cocacola-sms-desk.pages.dev']) {
   test('automatic secret-mode connection without a browser key on '+hostname,async()=>{
-    const elements=new Map(), stored=new Map([['smsdesk.session',JSON.stringify({key:'old-browser-test-key'})]]);
+    const elements=new Map(), stored=new Map([['smsdesk.session',JSON.stringify({key:'old-browser-test-key'})],['smsdesk.preferences',JSON.stringify({proxy:'https://cocacola-sms-proxy.jonibak2006.workers.dev'})]]);
     const element=id=>{
       if(!elements.has(id)) elements.set(id,{
         classList:{add(){},remove(){},toggle(){}},style:{},dataset:{},
@@ -23,7 +23,7 @@ for(const hostname of ['jonibak2.github.io','cocacola-sms-proxy.jonibak2006.work
     const browserStorage={getItem:key=>stored.get(key)||null,setItem:(key,value)=>stored.set(key,value),removeItem:key=>stored.delete(key)};
     const context=vm.createContext({
       ...model,location:{hostname,origin:'https://'+hostname},crypto,
-      document:{getElementById:element,querySelectorAll:()=>[],querySelector:element,addEventListener(){},body:element('body'),documentElement:element('html')},
+      document:{getElementById:element,querySelectorAll:()=>[],querySelector:selector=>selector==='meta[name="smsdesk-api"]' && hostname.endsWith('.pages.dev') ? {content:'same-origin'} : element(selector),addEventListener(){},body:element('body'),documentElement:element('html')},
       localStorage:browserStorage,sessionStorage:browserStorage,
       getComputedStyle:()=>({getPropertyValue:()=>'',minHeight:'300px'}),
       ResizeObserver:class{observe(){}},setTimeout:()=>1,clearTimeout(){},setInterval(){},
@@ -48,5 +48,7 @@ for(const hostname of ['jonibak2.github.io','cocacola-sms-proxy.jonibak2006.work
     assert.equal(requests.some(req=>req.body?.has('key')),false);
     assert.equal(requests.some(req=>req.url.includes('/api/session')),false);
     assert.equal(element('balance').textContent,'$5.00');
+    if(hostname.endsWith('.pages.dev')) assert.equal(requests.every(req=>req.url.startsWith('https://'+hostname+'/api/')),true);
+    if(hostname==='jonibak2.github.io') assert.equal(requests.every(req=>req.url.startsWith('https://cocacola-sms-desk.pages.dev/api/')),true);
   });
 }

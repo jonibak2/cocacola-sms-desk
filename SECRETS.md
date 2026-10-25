@@ -1,5 +1,7 @@
 # SMSPool account key in Cloudflare Secrets
 
+Preferred website: https://cocacola-sms-desk.pages.dev/. Its `/api/*` routes call the existing `cocacola-sms-proxy` Worker through the `SMSPOOL_PROXY` Service Binding. The browser does not need to connect to `workers.dev`. Keep `SMSPOOL_API_KEY` only in the original Worker; no key is copied into the Pages deployment. GitHub Pages now uses this Pages API too.
+
 The SMSPool account key stays in a Cloudflare Worker Secret named `SMSPOOL_API_KEY`. It is not sent to the browser, embedded in the site, or committed to GitHub. Anyone who has the site URL can view orders, buy numbers using its balance, and request supported refunds. No email login or access token is required.
 
 ## One-time setup

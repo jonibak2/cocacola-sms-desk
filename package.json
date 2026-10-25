@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": { "start": "node server.mjs", "test": "node --test tests/*.test.mjs" },
+  "scripts": { "start": "node server.mjs", "test": "node --test tests/*.test.mjs", "build:pages": "node pages/build.mjs", "deploy:pages": "npm run build:pages && npx wrangler pages deploy --cwd pages --branch main" },
   "engines": { "node": ">=22" }
 }

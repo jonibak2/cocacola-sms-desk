@@ -19,7 +19,7 @@ $('theme-toggle').onclick = () => {
   applyTheme(dark);
   storage.set('smsdesk.theme',dark ? 'dark' : 'light');
 };
-if (!prefs.proxy && !['localhost','127.0.0.1'].includes(location.hostname)) prefs.proxy = 'https://cocacola-sms-proxy.jonibak2006.workers.dev';
+if (!['localhost','127.0.0.1','[::1]'].includes(location.hostname) && (!prefs.proxy || /^https:\/\/cocacola-sms-proxy\.jonibak2006\.workers\.dev(?:\/api)?\/?$/.test(prefs.proxy))) prefs.proxy = 'https://cocacola-sms-desk.pages.dev/api';
 const refundBusy = new Set();
 let key = '', account = '', connected = false, demo = false, buying = false, uncertain = false, syncing = false, epoch = 0;
 let orders = new Map(), selected = '', filter = 'all', page = 1, pageSize = 4, balance = null, price = null, pollTimer, toastTimer, lastHistory = 0, lastBalance = 0, checkOffset = 0, pollDelay = 3000;
@@ -46,7 +46,7 @@ $('confirm-dialog').addEventListener('close',() => {
   resolve?.($('confirm-dialog').returnValue === 'confirm');
 });
 let serverManaged = false;
-const isWorkerApp = location.hostname === 'cocacola-sms-proxy.jonibak2006.workers.dev';
+const isWorkerApp = location.hostname === 'cocacola-sms-proxy.jonibak2006.workers.dev' || document.querySelector('meta[name="smsdesk-api"]')?.content === 'same-origin';
 let activeOrderId = ''; // Only a purchase made on this page may occupy the circle.
 const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 function proxyBase() { return isWorkerApp ? location.origin + '/api' : prefs.proxy || (isLocal ? location.origin + '/api' : ''); }
